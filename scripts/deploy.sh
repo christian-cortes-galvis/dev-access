@@ -26,10 +26,23 @@ fi
 log "git pull --ff-only"
 git pull --ff-only
 
+if ! ls nginx/conf.d/*.conf >/dev/null 2>&1; then
+  printf '\033[1;31mERROR\033[0m nginx/conf.d no tiene *.conf en %s\n' "$REPO_DIR" >&2
+  printf '        repo incompleto: mira git status --short y restaura con git checkout -- .\n' >&2
+  exit 1
+fi
+
 log "docker compose up -d"
 docker compose up -d
 
-if [ "$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)" = "running" ]; then
+status="$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)"
+if [ "$status" = "running" ] && ! docker exec access_nginx sh -c 'ls /etc/nginx/conf.d/*.conf >/dev/null 2>&1'; then
+  log "access_nginx no tiene conf.d montado (contenedor viejo); recreando ingress"
+  docker compose up -d --force-recreate ingress || true
+  status="$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)"
+fi
+
+if [ "$status" = "running" ]; then
   if docker exec access_nginx nginx -t && docker exec access_nginx nginx -s reload; then
     log "nginx recargado (aplica conf.d montado)"
   else
