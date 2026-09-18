@@ -8,6 +8,8 @@ set -uo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAIL=0
 
+cd "$REPO_DIR"
+
 ok()   { printf '  \033[1;32mOK\033[0m   %s\n' "$*"; }
 bad()  { printf '  \033[1;31mFAIL\033[0m %s\n' "$*"; FAIL=1; }
 info() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -40,6 +42,13 @@ else
   echo "       Si es 403/404, Pi-hole sigue ocupando el 443:"
   echo "         - compose con puertos: usa 'docker compose up -d' (recrear, no 'restart')"
   echo "         - Pi-hole con network_mode: host: cambia 'webserver.port' (p. ej. 8080o,8443s) en pihole.toml"
+  echo "       Si es 000 estando access_nginx 'running', suele faltar config en el repo:"
+  echo "       --- docker compose logs --tail 15 ingress ---"
+  docker compose logs --tail 15 ingress 2>/dev/null || true
+  echo "       --- docker exec access_nginx ls -la /etc/nginx/conf.d ---"
+  docker exec access_nginx ls -la /etc/nginx/conf.d 2>/dev/null || true
+  echo "       --- docker exec access_nginx nginx -t ---"
+  docker exec access_nginx nginx -t 2>&1 || true
 fi
 
 c="$(code index.cortexdev.lan /laravel.html)"
@@ -56,10 +65,20 @@ else
   bad "ca.cortexdev.lan /cortexdev-lan-ca.crt -> $c"
 fi
 
+dig_answer() {
+  local name="$1" out=""
+  for _ in 1 2 3 4; do
+    out="$(dig +short "$name" @127.0.0.1 +time=2 +tries=1 2>/dev/null || true)"
+    [ -n "$out" ] && break
+    sleep 1
+  done
+  printf '%s' "$out"
+}
+
 info "DNS (Pi-hole local)"
 if command -v dig >/dev/null; then
   for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
-    r="$(dig +short "$h.cortexdev.lan" @127.0.0.1 2>/dev/null || true)"
+    r="$(dig_answer "$h.cortexdev.lan")"
     if [ "$r" = "192.168.0.49" ]; then
       ok "$h.cortexdev.lan -> 192.168.0.49"
     else
@@ -67,7 +86,7 @@ if command -v dig >/dev/null; then
     fi
   done
 
-  r="$(dig +short app-admin.cortexdev.lan @127.0.0.1 2>/dev/null || true)"
+  r="$(dig_answer app-admin.cortexdev.lan)"
   if [ "$r" = "192.168.0.87" ]; then
     ok "app-admin.cortexdev.lan -> 192.168.0.87 (wildcard apps)"
   else

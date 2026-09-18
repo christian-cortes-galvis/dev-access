@@ -115,19 +115,29 @@ else
   bad "no se pudo recargar Pi-hole"
 fi
 
+dig_answer() {
+  local name="$1" out=""
+  for _ in 1 2 3 4; do
+    out="$(dig +short "$name" @127.0.0.1 +time=2 +tries=1 2>/dev/null || true)"
+    [ -n "$out" ] && break
+    sleep 1
+  done
+  printf '%s' "$out"
+}
+
 info "4/4 Verificacion (dig @127.0.0.1)"
 if ! command -v dig >/dev/null; then
   bad "dig no instalado; no se pudo verificar"
 else
   for h in $HOSTS; do
-    r="$(dig +short "${h}.cortexdev.lan" @127.0.0.1 2>/dev/null || true)"
+    r="$(dig_answer "${h}.cortexdev.lan")"
     if [ "$r" = "$ACCESS_IP" ]; then
       ok "${h}.cortexdev.lan -> $ACCESS_IP"
     else
       bad "${h}.cortexdev.lan -> ${r:-sin respuesta}"
     fi
   done
-  r="$(dig +short app-admin.cortexdev.lan @127.0.0.1 2>/dev/null || true)"
+  r="$(dig_answer app-admin.cortexdev.lan)"
   if [ "$r" = "$APPS_IP" ]; then
     ok "app-admin.cortexdev.lan -> $APPS_IP (wildcard apps)"
   else

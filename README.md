@@ -16,7 +16,10 @@ portal/                            # índice estático (HTML/CSS/JS, favicons, i
 certs/                             # gitignored; wildcard *.cortexdev.lan + CA (install-certs.sh)
 systemd/access-ingress.service.template
 scripts/install-certs.sh
+scripts/dns-overrides.sh           # overrides DNS de la capa de acceso en Pi-hole (idempotente)
 scripts/deploy.sh
+scripts/check.sh
+scripts/setup-services.sh
 ```
 
 ## Requisitos en ubuntu-services
@@ -91,12 +94,14 @@ scripts/setup-services.sh
 ```
 
 Instala certs si faltan, detecta Pi-hole y libera 80/443 (modo host o bridge), levanta el compose,
-valida y avisa si faltan los overrides DNS.
+aplica los overrides DNS con `scripts/dns-overrides.sh` y valida con `scripts/check.sh`.
 
 ## DNS en Pi-hole (192.168.0.49)
 
 En `misc.dnsmasq_lines` el wildcard manda las apps a ubuntu-docker; estos overrides mandan la
-capa de acceso a ubuntu-services (dnsmasq usa la coincidencia más específica):
+capa de acceso a ubuntu-services (dnsmasq usa la coincidencia más específica).
+`scripts/dns-overrides.sh` los aplica automáticamente (backup de `pihole.toml`, escritura vía
+`pihole-FTL --config`, `reloaddns` y verificación con `dig`; idempotente):
 
 ```
 address=/index.cortexdev.lan/192.168.0.49
