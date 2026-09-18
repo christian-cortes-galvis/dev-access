@@ -18,6 +18,11 @@ log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
 cd "$REPO_DIR"
 
+if [ "${ALLOW_OTHER_HOST:-0}" != "1" ] && ! hostname -I 2>/dev/null | grep -q '192\.168\.0\.49'; then
+  printf '\033[1;31mERROR\033[0m deploy.sh debe correr en ubuntu-services (192.168.0.49); usa ALLOW_OTHER_HOST=1 para forzar\n' >&2
+  exit 1
+fi
+
 log "git pull --ff-only"
 git pull --ff-only
 

@@ -22,6 +22,11 @@ port_open() { timeout 1 bash -c "</dev/tcp/127.0.0.1/$1" 2>/dev/null; }
 
 cd "$REPO_DIR"
 
+if [ "${ALLOW_OTHER_HOST:-0}" != "1" ] && ! hostname -I 2>/dev/null | grep -q '192\.168\.0\.49'; then
+  printf '\033[1;31mERROR\033[0m setup-services.sh debe correr en ubuntu-services (192.168.0.49); usa ALLOW_OTHER_HOST=1 para forzar\n' >&2
+  exit 1
+fi
+
 info "1/5 Archivos y certificados"
 for p in docker-compose.yml nginx/conf.d/index.conf nginx/conf.d/ca.conf nginx/conf.d/infra.conf portal/index.html; do
   if [ -e "$p" ]; then

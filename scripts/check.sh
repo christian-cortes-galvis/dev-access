@@ -13,6 +13,11 @@ cd "$REPO_DIR"
 ok()   { printf '  \033[1;32mOK\033[0m   %s\n' "$*"; }
 bad()  { printf '  \033[1;31mFAIL\033[0m %s\n' "$*"; FAIL=1; }
 info() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '  \033[1;33mWARN\033[0m %s\n' "$*"; }
+
+if ! hostname -I 2>/dev/null | grep -q '192\.168\.0\.49'; then
+  warn "esta maquina no tiene la IP 192.168.0.49: check.sh valida ubuntu-services, no ubuntu-docker (.87)"
+fi
 
 info "Certificados"
 for f in cortexdev.lan.pem cortexdev.lan-key.pem ca.pem; do
