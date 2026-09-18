@@ -1,0 +1,12 @@
+services:
+  ingress:
+    image: nginx:stable
+    container_name: access_nginx
+    restart: unless-stopped
+    # host network: nginx bindea 80/443 directamente y alcanza Pi-hole (8443)
+    # y Netdata/Uptime por 127.0.0.1 en ubuntu-services.
+    network_mode: host
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ./portal:/var/www/portal:ro

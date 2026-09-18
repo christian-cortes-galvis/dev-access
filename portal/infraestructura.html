@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Infraestructura · cortexdev.lan</title>
+	<link rel="icon" type="image/png" sizes="32x32" href="/favicons/cortexdev-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
+<script src="/theme.js"></script>
+	<link rel="stylesheet" href="/style.css">
+	<script src="/app.js" defer></script>
+</head>
+
+<body>
+	<div class="wrap">
+
+		<header class="top">
+			<div class="brand">
+				<div class="logo"><img src="/favicons/cortexdev-180.png" alt="CortexDev" width="42" height="42"></div>
+				<div>
+					<h1>Infraestructura</h1>
+					<p>Servicios de la LAN expuestos vía <code>*.cortexdev.lan</code></p>
+				</div>
+			</div>
+			<nav class="crumbs">
+				<a href="/">Inicio</a>
+				<a class="active" href="/infraestructura.html">Infraestructura</a>
+				<a href="/laravel.html">Laravel</a>
+				<a href="/codeigniter.html">CodeIgniter / PHP</a>
+				<a href="/spas.html">SPAs y utilidades</a>
+			</nav>
+		</header>
+
+		<div class="section-title">Máquinas: 192.168.0.87 (docker) &middot; .49 (services) &middot; .166 (pbs) &middot; .224
+			(pve)</div>
+
+		<table class="links">
+			<thead>
+				<tr>
+					<th>Servicio</th>
+					<th>URL</th>
+					<th>Estado</th>
+					<th>Destino</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td class="name" data-tech="portainer" data-badge="off">Portainer CE</td>
+					<td class="url"><a href="https://portainer.cortexdev.lan" target="_blank"
+							rel="noopener">portainer.cortexdev.lan</a></td>
+					<td><span class="pill ok">200</span></td>
+					<td class="note"><code>portainer:9000</code> (docker)</td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="proxmox" data-badge="off">Proxmox VE</td>
+					<td class="url"><a href="https://proxmox.cortexdev.lan" target="_blank"
+							rel="noopener">proxmox.cortexdev.lan</a></td>
+					<td><span class="pill ok">200</span></td>
+					<td class="note">192.168.0.224:8006</td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="proxmox" data-badge="off">Proxmox Backup Server</td>
+					<td class="url"><a href="https://backups.cortexdev.lan" target="_blank"
+							rel="noopener">backups.cortexdev.lan</a></td>
+					<td><span class="pill ok">200</span></td>
+					<td class="note">PBS 192.168.0.166:8007 &middot; alias <a href="https://pbs.cortexdev.lan" target="_blank"
+							rel="noopener">pbs</a></td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="pihole" data-badge="off">Pi-hole</td>
+					<td class="url"><a href="https://pihole.cortexdev.lan" target="_blank" rel="noopener">pihole.cortexdev.lan</a>
+					</td>
+					<td><span class="pill login">302</span></td>
+					<td class="note">192.168.0.49 &rarr; <code>/admin/</code> (DNS de la LAN)</td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="uptime-kuma" data-badge="off">Uptime Kuma</td>
+					<td class="url"><a href="https://uptime.cortexdev.lan" target="_blank" rel="noopener">uptime.cortexdev.lan</a>
+					</td>
+					<td><span class="pill login">302</span></td>
+					<td class="note">192.168.0.49:3001 &rarr; <code>/dashboard</code> &middot; alias <a
+							href="https://kuma.cortexdev.lan" target="_blank" rel="noopener">kuma</a></td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="netdata" data-badge="off">Netdata &middot; proxmox-backups</td>
+					<td class="url"><a href="https://netdata-backups.cortexdev.lan" target="_blank"
+							rel="noopener">netdata-backups.cortexdev.lan</a></td>
+					<td><span class="pill ok">200</span></td>
+					<td class="note">192.168.0.166:19999</td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="netdata" data-badge="off">Netdata &middot; proxmox-server</td>
+					<td class="url"><a href="https://netdata-proxmox.cortexdev.lan" target="_blank"
+							rel="noopener">netdata-proxmox.cortexdev.lan</a></td>
+					<td><span class="pill ok">200</span></td>
+					<td class="note">192.168.0.224:19999</td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="netdata" data-badge="off">Netdata &middot; ubuntu-docker</td>
+					<td class="url"><a href="https://netdata-docker.cortexdev.lan" target="_blank"
+							rel="noopener">netdata-docker.cortexdev.lan</a></td>
+					<td><span class="pill ok">200</span></td>
+					<td class="note">192.168.0.87:19999</td>
+				</tr>
+				<tr>
+					<td class="name" data-tech="netdata" data-badge="off">Netdata &middot; ubuntu-services</td>
+					<td class="url"><a href="https://netdata-services.cortexdev.lan" target="_blank"
+							rel="noopener">netdata-services.cortexdev.lan</a></td>
+					<td><span class="pill ok">200</span></td>
+					<td class="note">192.168.0.49:19999</td>
+				</tr>
+			</tbody>
+		</table>
+
+		<div class="legend">
+			<span><img class="tech" src="/icons/portainer.svg" alt="Portainer"> Portainer</span>
+			<span><img class="tech" src="/icons/proxmox.svg" alt="Proxmox"> Proxmox</span>
+			<span><img class="tech" src="/icons/pihole.svg" alt="Pi-hole"> Pi-hole</span>
+			<span><img class="tech" src="/icons/uptime-kuma.svg" alt="Uptime Kuma"> Uptime Kuma</span>
+			<span><img class="tech" src="/icons/netdata.svg" alt="Netdata"> Netdata</span>
+		</div>
+
+		<div class="notice">
+			<strong>DNS:</strong> Pi-hole resuelve el wildcard <code>address=/cortexdev.lan/192.168.0.87</code>
+			(<code>misc.dnsmasq_lines</code>). <strong>TLS:</strong> certificado wildcard de mkcert en
+			<code>nginx/certs/cortexdev.lan/</code>; la CA se distribuye en
+			<a href="http://ca.cortexdev.lan/">http://ca.cortexdev.lan/</a>.
+		</div>
+
+		<footer class="bottom">
+			<span>cortexdev.lan &middot; Infraestructura</span>
+			<span><a href="/">Volver al índice</a></span>
+		</footer>
+
+	</div>
+</body>
+
+</html>

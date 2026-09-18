@@ -1,0 +1,4 @@
+# Certificados locales de mkcert: nunca versionar (incluye la llave privada).
+certs/
+*.pem
+*.key

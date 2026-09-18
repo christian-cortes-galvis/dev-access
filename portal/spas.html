@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPAs y utilidades · cortexdev.lan</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicons/cortexdev-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo"><img src="/favicons/cortexdev-180.png" alt="CortexDev" width="42" height="42"></div>
+      <div>
+        <h1>SPAs y utilidades</h1>
+        <p>Angular, React, Python y herramientas de la LAN</p>
+      </div>
+    </div>
+    <nav class="crumbs">
+      <a href="/">Inicio</a>
+      <a href="/infraestructura.html">Infraestructura</a>
+      <a href="/laravel.html">Laravel</a>
+      <a href="/codeigniter.html">CodeIgniter / PHP</a>
+      <a class="active" href="/spas.html">SPAs y utilidades</a>
+    </nav>
+  </header>
+
+  <div class="section-title">Aplicaciones front-end y utilidades</div>
+
+  <table class="links">
+    <thead>
+      <tr><th>Proyecto</th><th>URL</th><th>Estado</th><th>Nota</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="name" data-tech="angular" data-app="portal-pacientes.png" data-color="#dd0031">Portal Pacientes</td>
+        <td class="url"><a href="https://portal-pacientes.cortexdev.lan" target="_blank" rel="noopener">portal-pacientes.cortexdev.lan</a></td>
+        <td><span class="pill ok">200</span></td>
+        <td class="note">Angular 21 (dev server 4200). <code>/api/</code> &rarr; <code>admin-portal-pacientes.cortexdev.win</code></td>
+      </tr>
+      <tr>
+        <td class="name" data-tech="react" data-app="centro-apoyo.png" data-color="#0891b2">Centro de Apoyo</td>
+        <td class="url"><a href="https://centro-apoyo.cortexdev.lan" target="_blank" rel="noopener">centro-apoyo.cortexdev.lan</a></td>
+        <td><span class="pill login">302</span></td>
+        <td class="note">React 17 &rarr; redirige a <code>/centro-apoyo/</code></td>
+      </tr>
+      <tr>
+        <td class="name" data-tech="python" data-app="bot-gomedisys.png" data-color="#3776ab">Bot Gomedisys</td>
+        <td class="url"><a href="https://bot-gomedisys.cortexdev.lan" target="_blank" rel="noopener">bot-gomedisys.cortexdev.lan</a></td>
+        <td><span class="pill ok">200</span></td>
+        <td class="note">Python 3.12 + Playwright, puerto 6000</td>
+      </tr>
+      <tr>
+        <td class="name" data-tech="phpmyadmin" data-badge="off">phpMyAdmin</td>
+        <td class="url"><a href="https://pma.cortexdev.lan" target="_blank" rel="noopener">pma.cortexdev.lan</a></td>
+        <td><span class="pill ok">200</span></td>
+        <td class="note">Administración de MySQL</td>
+      </tr>
+      <tr>
+        <td class="name" data-tech="certificate" data-badge="off">CA local (mkcert)</td>
+        <td class="url"><a href="http://ca.cortexdev.lan/">ca.cortexdev.lan</a></td>
+        <td><span class="pill login">302</span></td>
+        <td class="note">Descarga <code>cortexdev-lan-ca.crt</code> para confiar en <code>*.cortexdev.lan</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="legend">
+    <span><img class="app-icon" src="/favicons/portal-pacientes.png" alt=""> favicon/logo real de la app</span>
+    <span><img class="tech" src="/icons/angular.svg" alt="Angular"> Angular</span>
+    <span><img class="tech" src="/icons/react.svg" alt="React"> React</span>
+    <span><img class="tech" src="/icons/python.svg" alt="Python"> Python</span>
+    <span><img class="tech" src="/icons/phpmyadmin.svg" alt="phpMyAdmin"> phpMyAdmin</span>
+    <span><img class="tech" src="/icons/certificate.svg" alt="CA"> Certificado</span>
+  </div>
+
+  <div class="notice">
+    <strong>Nota:</strong> la única llamada interna que se mantiene en <code>.win</code> es
+    <code>portal-pacientes &rarr; admin-portal-pacientes</code> (<code>/api/</code>), que no pasa
+    por el navegador. El resto de apps y utilidades son accesibles por <code>.lan</code>.
+  </div>
+
+  <footer class="bottom">
+    <span>cortexdev.lan &middot; SPAs y utilidades</span>
+    <span><a href="/">Volver al índice</a></span>
+  </footer>
+
+</div>
+</body>
+</html>

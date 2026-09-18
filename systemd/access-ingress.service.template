@@ -1,0 +1,17 @@
+[Unit]
+Description=Nginx capa de acceso (portal/CA/infra) en ubuntu-services
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=__REMOTE_DIR__
+ExecStart=/usr/bin/docker compose up -d
+TimeoutStartSec=0
+User=__REMOTE_USER__
+Group=__REMOTE_USER__
+
+[Install]
+WantedBy=multi-user.target
