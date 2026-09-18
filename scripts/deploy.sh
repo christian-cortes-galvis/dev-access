@@ -24,6 +24,15 @@ git pull --ff-only
 log "docker compose up -d"
 docker compose up -d
 
+if [ "$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)" = "running" ]; then
+  if docker exec access_nginx nginx -t && docker exec access_nginx nginx -s reload; then
+    log "nginx recargado (aplica conf.d montado)"
+  else
+    log "nginx no pudo cargar la config; recreando ingress"
+    docker compose up -d --force-recreate ingress || true
+  fi
+fi
+
 if [ "${INSTALL_SYSTEMD:-0}" = "1" ]; then
   unit_tmp="$(mktemp)"
   sed -e "s|__REMOTE_DIR__|$REPO_DIR|g" -e "s|__REMOTE_USER__|$(id -un)|g" \

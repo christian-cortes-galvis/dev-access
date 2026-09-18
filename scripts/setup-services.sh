@@ -108,7 +108,21 @@ docker compose up -d || bad "docker compose up -d fallo"
 sleep 2
 st="$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)"
 if [ "$st" = "running" ]; then
-  ok "access_nginx running"
+  if docker exec access_nginx nginx -t >/dev/null 2>&1 && docker exec access_nginx nginx -s reload >/dev/null 2>&1; then
+    ok "access_nginx running (config recargada)"
+  else
+    bad "access_nginx corre pero no puede cargar la config; recreando ingress"
+    docker compose up -d --force-recreate ingress || bad "no se pudo recrear ingress"
+    sleep 2
+    st="$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)"
+    if [ "$st" = "running" ]; then
+      ok "access_nginx running (recreado)"
+    else
+      bad "access_nginx no arranco (estado: ${st:-inexistente}); ultimos logs:"
+      docker compose logs --tail 40 ingress 2>&1 || true
+      docker inspect --format '       exit={{.State.ExitCode}} error={{.State.Error}}' access_nginx 2>/dev/null || true
+    fi
+  fi
 else
   bad "access_nginx no arranco (estado: ${st:-inexistente}); ultimos logs:"
   docker compose logs --tail 40 ingress 2>&1 || true
