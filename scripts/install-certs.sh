@@ -20,11 +20,17 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="${1:-${SRC:-christian@192.168.0.87:/home/christian/dev/nginx/certs/cortexdev.lan}}"
 DEST_DIR="${DEST_DIR:-$REPO_DIR/certs/cortexdev.lan}"
+SCP_OPTS="${SCP_OPTS:--o StrictHostKeyChecking=accept-new}"
 
 FILES=(cortexdev.lan.pem cortexdev.lan-key.pem ca.pem)
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+
+if [ "$(id -u)" = "0" ] && [[ "$SRC" == *:* ]]; then
+  echo "AVISO: ejecutando como root; usara las claves y known_hosts de root, no los de tu usuario." >&2
+  echo "       Si el scp falla, ejecuta sin sudo: scripts/install-certs.sh" >&2
+fi
 
 mkdir -p "$DEST_DIR"
 
@@ -35,7 +41,7 @@ if [[ "$SRC" == *:* ]]; then
   command -v scp >/dev/null || die "scp no esta instalado."
   for f in "${FILES[@]}"; do
     log "scp $f"
-    scp "$SRC/$f" "$DEST_DIR/$f"
+    scp $SCP_OPTS "$SRC/$f" "$DEST_DIR/$f"
   done
 else
   for f in "${FILES[@]}"; do

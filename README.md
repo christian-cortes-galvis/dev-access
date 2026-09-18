@@ -22,9 +22,11 @@ scripts/deploy.sh
 ## Requisitos en ubuntu-services
 
 - Docker + Docker Compose v2, con el servicio habilitado al arranque (`systemctl is-enabled docker`).
-- Pi-hole en Docker: su UI web debe salir de 80/443 para dejar esos puertos a este nginx.
-  En su compose, publicar `8080:80` y `8443:443` (los puertos internos del contenedor no cambian)
-  y `restart: unless-stopped`. `infra.conf` proxifica `pihole.cortexdev.lan` a `127.0.0.1:8443`.
+- Pi-hole (nativo o Docker) debe soltar 80/443 para dejárselos a este nginx:
+  - **nativo (v6)**: `sudo pihole-FTL --config webserver.port '8080o,8443s'` y `sudo systemctl restart pihole-FTL`.
+  - **Docker**: publicar `8080:80` y `8443:443` en su compose y recrear con `docker compose up -d`
+    (no `restart`), con `restart: unless-stopped`.
+  `infra.conf` proxifica `pihole.cortexdev.lan` a `127.0.0.1:8443`.
 - Los certificados (no están en git).
 
 ## Puesta en marcha
@@ -37,7 +39,14 @@ cd ~/cortexdev-access
 # 2. Instalar certificados (scp desde ubuntu-docker, una vez)
 scripts/install-certs.sh
 #    o: scripts/install-certs.sh usuario@otro-host:/ruta/certs
+```
 
+`install-certs.sh` se ejecuta **sin `sudo`**: así usa tus claves y tu `known_hosts`. Acepta el
+host nuevo automáticamente (`StrictHostKeyChecking=accept-new`). Si `ubuntu-services` aún no tiene
+acceso SSH a `ubuntu-docker`, autoriza su clave primero (o usa un origen local
+`scripts/install-certs.sh /ruta/local`).
+
+```bash
 # 3. Levantar nginx de acceso (requiere 80/443 libres)
 docker compose up -d
 
@@ -50,6 +59,39 @@ INSTALL_SYSTEMD=1 scripts/deploy.sh
 ```bash
 scripts/deploy.sh                 # git pull + docker compose up -d
 ```
+
+## Validar
+
+En `ubuntu-services`:
+
+```bash
+scripts/check.sh
+```
+
+Comprueba certificados, que `access_nginx` esté corriendo, respuestas `200` de `index`/`ca` por HTTP
+local (con `Host`, sin depender del DNS), los overrides DNS en Pi-hole y los puertos 80/443.
+Equivalente manual:
+
+```bash
+curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: index.cortexdev.lan' https://127.0.0.1/  # 200
+curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: ca.cortexdev.lan' https://127.0.0.1/cortexdev-lan-ca.crt  # 200
+dig +short index.cortexdev.lan @127.0.0.1      # 192.168.0.49
+dig +short app-admin.cortexdev.lan @127.0.0.1  # 192.168.0.87
+```
+
+Desde cualquier equipo de la LAN: `https://index.cortexdev.lan` (sin `-k` si ya confía en la CA).
+Si `index` devuelve `403`, Pi-hole sigue ocupando el 443: remapea su UI a `8080/8443`.
+
+### Puesta en marcha todo-en-uno
+
+Si prefieres un solo paso (idempotente), en `ubuntu-services`:
+
+```bash
+scripts/setup-services.sh
+```
+
+Instala certs si faltan, detecta Pi-hole y libera 80/443 (modo host o bridge), levanta el compose,
+valida y avisa si faltan los overrides DNS.
 
 ## DNS en Pi-hole (192.168.0.49)
 
