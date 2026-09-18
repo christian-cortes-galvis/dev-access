@@ -115,38 +115,19 @@ else
   docker inspect --format '       exit={{.State.ExitCode}} error={{.State.Error}}' access_nginx 2>/dev/null || true
 fi
 
-info "5/5 Validacion"
-if [ -x scripts/check.sh ]; then
-  scripts/check.sh || true
+info "5/5 DNS y validacion"
+if [ -n "$PIHOLE_KIND" ] && [ -x scripts/dns-overrides.sh ]; then
+  scripts/dns-overrides.sh || true
+elif [ -n "$PIHOLE_KIND" ]; then
+  bad "falta scripts/dns-overrides.sh; agrega a mano en misc.dnsmasq_lines:"
+  for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
+    printf '         address=/%s.cortexdev.lan/192.168.0.49\n' "$h"
+  done
+  printf '       Conserva la linea del wildcard: address=/cortexdev.lan/192.168.0.87\n'
 fi
 
-if [ "$PIHOLE_KIND" = "native" ]; then
-  info "DNS en Pi-hole (overrides)"
-  cur="$(sudo pihole-FTL --config misc.dnsmasq_lines 2>/dev/null || true)"
-  if printf '%s' "$cur" | grep -q 'index\.cortexdev\.lan'; then
-    ok "overrides de la capa de acceso presentes"
-  else
-    bad "faltan los overrides en misc.dnsmasq_lines. Agrega estas lineas en la UI de Pi-hole"
-    printf '       (Settings -> All settings -> misc.dnsmasq_lines) y guarda:\n'
-    for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
-      printf '         address=/%s.cortexdev.lan/192.168.0.49\n' "$h"
-    done
-    printf '       Conserva la linea del wildcard: address=/cortexdev.lan/192.168.0.87\n'
-    printf '       Luego: sudo pihole reloaddns\n'
-  fi
-elif [ -n "${PIHOLE:-}" ]; then
-  info "DNS en Pi-hole (overrides)"
-  cur="$(docker exec "$PIHOLE" pihole-FTL --config misc.dnsmasq_lines 2>/dev/null || true)"
-  if printf '%s' "$cur" | grep -q 'index\.cortexdev\.lan'; then
-    ok "overrides de la capa de acceso presentes"
-  else
-    bad "faltan los overrides en misc.dnsmasq_lines (Settings -> All settings). Deben incluir:"
-    for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
-      printf '         address=/%s.cortexdev.lan/192.168.0.49\n' "$h"
-    done
-    printf '       Conserva la linea del wildcard: address=/cortexdev.lan/192.168.0.87\n'
-    printf '       Luego: docker exec %s pihole reloaddns\n' "$PIHOLE"
-  fi
+if [ -x scripts/check.sh ]; then
+  scripts/check.sh || true
 fi
 
 echo

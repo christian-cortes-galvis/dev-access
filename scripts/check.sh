@@ -58,12 +58,14 @@ fi
 
 info "DNS (Pi-hole local)"
 if command -v dig >/dev/null; then
-  r="$(dig +short index.cortexdev.lan @127.0.0.1 2>/dev/null || true)"
-  if [ "$r" = "192.168.0.49" ]; then
-    ok "index.cortexdev.lan -> 192.168.0.49"
-  else
-    bad "index.cortexdev.lan -> ${r:-sin respuesta} (falta el override en misc.dnsmasq_lines)"
-  fi
+  for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
+    r="$(dig +short "$h.cortexdev.lan" @127.0.0.1 2>/dev/null || true)"
+    if [ "$r" = "192.168.0.49" ]; then
+      ok "$h.cortexdev.lan -> 192.168.0.49"
+    else
+      bad "$h.cortexdev.lan -> ${r:-sin respuesta} (falta el override en misc.dnsmasq_lines)"
+    fi
+  done
 
   r="$(dig +short app-admin.cortexdev.lan @127.0.0.1 2>/dev/null || true)"
   if [ "$r" = "192.168.0.87" ]; then
