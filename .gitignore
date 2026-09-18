@@ -2,3 +2,10 @@
 certs/
 *.pem
 *.key
+
+# Datos runtime de portal-api (SQLite). Se recrea desde backend/catalog.yml.
+backend/data/
+
+# Python
+__pycache__/
+*.pyc

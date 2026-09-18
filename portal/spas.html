@@ -9,6 +9,7 @@
 <script src="/theme.js"></script>
 <link rel="stylesheet" href="/style.css">
 <script src="/app.js" defer></script>
+<script src="/render.js" defer></script>
 </head>
 <body>
 <div class="wrap">
@@ -32,42 +33,11 @@
 
   <div class="section-title">Aplicaciones front-end y utilidades</div>
 
-  <table class="links">
+  <table class="links" data-category="spas">
     <thead>
       <tr><th>Proyecto</th><th>URL</th><th>Estado</th><th>Nota</th></tr>
     </thead>
-    <tbody>
-      <tr>
-        <td class="name" data-tech="angular" data-app="portal-pacientes.png" data-color="#dd0031">Portal Pacientes</td>
-        <td class="url"><a href="https://portal-pacientes.cortexdev.lan" target="_blank" rel="noopener">portal-pacientes.cortexdev.lan</a></td>
-        <td><span class="pill ok">200</span></td>
-        <td class="note">Angular 21 (dev server 4200). <code>/api/</code> &rarr; <code>admin-portal-pacientes.cortexdev.win</code></td>
-      </tr>
-      <tr>
-        <td class="name" data-tech="react" data-app="centro-apoyo.png" data-color="#0891b2">Centro de Apoyo</td>
-        <td class="url"><a href="https://centro-apoyo.cortexdev.lan" target="_blank" rel="noopener">centro-apoyo.cortexdev.lan</a></td>
-        <td><span class="pill login">302</span></td>
-        <td class="note">React 17 &rarr; redirige a <code>/centro-apoyo/</code></td>
-      </tr>
-      <tr>
-        <td class="name" data-tech="python" data-app="bot-gomedisys.png" data-color="#3776ab">Bot Gomedisys</td>
-        <td class="url"><a href="https://bot-gomedisys.cortexdev.lan" target="_blank" rel="noopener">bot-gomedisys.cortexdev.lan</a></td>
-        <td><span class="pill ok">200</span></td>
-        <td class="note">Python 3.12 + Playwright, puerto 6000</td>
-      </tr>
-      <tr>
-        <td class="name" data-tech="phpmyadmin" data-badge="off">phpMyAdmin</td>
-        <td class="url"><a href="https://pma.cortexdev.lan" target="_blank" rel="noopener">pma.cortexdev.lan</a></td>
-        <td><span class="pill ok">200</span></td>
-        <td class="note">Administración de MySQL</td>
-      </tr>
-      <tr>
-        <td class="name" data-tech="certificate" data-badge="off">CA local (mkcert)</td>
-        <td class="url"><a href="http://ca.cortexdev.lan/">ca.cortexdev.lan</a></td>
-        <td><span class="pill login">302</span></td>
-        <td class="note">Descarga <code>cortexdev-lan-ca.crt</code> para confiar en <code>*.cortexdev.lan</code></td>
-      </tr>
-    </tbody>
+    <tbody></tbody>
   </table>
 
   <div class="legend">

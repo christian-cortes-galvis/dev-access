@@ -10,6 +10,7 @@
 	<script src="/theme.js"></script>
 	<link rel="stylesheet" href="/style.css">
 	<script src="/app.js" defer></script>
+	<script src="/render.js" defer></script>
 </head>
 
 <body>
@@ -33,70 +34,33 @@
 		</header>
 
 		<div class="grid">
-			<a class="card" href="/infraestructura.html" data-tech="server,portainer,proxmox">
+			<a class="card" href="/infraestructura.html" data-tech="server,portainer,proxmox" data-category-card="infraestructura">
 				<h3>Infraestructura</h3>
 				<p>Portainer, Proxmox VE, Proxmox Backup Server, Pi-hole, Uptime Kuma y Netdata (uno por servidor).</p>
-				<div class="count">9 servicios &rarr;</div>
+				<div class="count">&mdash;</div>
 			</a>
 
-			<a class="card" href="/laravel.html" data-tech="laravel">
+			<a class="card" href="/laravel.html" data-tech="laravel" data-category-card="laravel">
 				<h3>Laravel</h3>
 				<p>Aplicaciones PHP 8.3 servidas por <code>laravel_web</code> (FPM).</p>
-				<div class="count">13 proyectos &rarr;</div>
+				<div class="count">&mdash;</div>
 			</a>
 
-			<a class="card" href="/codeigniter.html" data-tech="codeigniter,php">
+			<a class="card" href="/codeigniter.html" data-tech="codeigniter,php" data-category-card="codeigniter">
 				<h3>CodeIgniter / PHP</h3>
 				<p>Apps PHP 8.1 bajo <code>apps.cortexdev.lan/&lt;ruta&gt;</code> y <code>csr-twofa</code>.</p>
-				<div class="count">13 apps &rarr;</div>
+				<div class="count">&mdash;</div>
 			</a>
 
-			<a class="card" href="/spas.html" data-tech="angular,react,python">
+			<a class="card" href="/spas.html" data-tech="angular,react,python" data-category-card="spas">
 				<h3>SPAs y utilidades</h3>
 				<p>Portal Pacientes (Angular), Centro de Apoyo (React), Bot Gomedisys y phpMyAdmin.</p>
-				<div class="count">4 apps &rarr;</div>
+				<div class="count">&mdash;</div>
 			</a>
 		</div>
 
 		<div class="section-title">Acceso rápido a infraestructura</div>
-		<div class="grid">
-			<a class="card" href="https://portainer.cortexdev.lan" target="_blank" rel="noopener" data-tech="portainer">
-				<h3>Portainer</h3>
-				<p>Contenedores Docker</p>
-			</a>
-			<a class="card" href="https://proxmox.cortexdev.lan" target="_blank" rel="noopener" data-tech="proxmox">
-				<h3>Proxmox VE</h3>
-				<p>Hipervisor 192.168.0.224</p>
-			</a>
-			<a class="card" href="https://backups.cortexdev.lan" target="_blank" rel="noopener" data-tech="proxmox">
-				<h3>Proxmox Backup</h3>
-				<p>PBS 192.168.0.166</p>
-			</a>
-			<a class="card" href="https://pihole.cortexdev.lan" target="_blank" rel="noopener" data-tech="pihole">
-				<h3>Pi-hole</h3>
-				<p>DNS de la LAN</p>
-			</a>
-			<a class="card" href="https://uptime.cortexdev.lan" target="_blank" rel="noopener" data-tech="uptime-kuma">
-				<h3>Uptime Kuma</h3>
-				<p>Monitorización</p>
-			</a>
-			<a class="card" href="https://netdata-proxmox.cortexdev.lan" target="_blank" rel="noopener" data-tech="netdata">
-				<h3>Netdata · proxmox-server</h3>
-				<p>Métricas 192.168.0.224</p>
-			</a>
-			<a class="card" href="https://netdata-backups.cortexdev.lan" target="_blank" rel="noopener" data-tech="netdata">
-				<h3>Netdata · proxmox-backups</h3>
-				<p>Métricas 192.168.0.166</p>
-			</a>
-			<a class="card" href="https://netdata-docker.cortexdev.lan" target="_blank" rel="noopener" data-tech="netdata">
-				<h3>Netdata · ubuntu-docker</h3>
-				<p>Métricas 192.168.0.87</p>
-			</a>
-			<a class="card" href="https://netdata-services.cortexdev.lan" target="_blank" rel="noopener" data-tech="netdata">
-				<h3>Netdata · ubuntu-services</h3>
-				<p>Métricas 192.168.0.49</p>
-			</a>
-		</div>
+		<div class="grid" data-cards="infraestructura"></div>
 
 		<div class="notice">
 			<strong>Certificado local:</strong> si tu equipo muestra un aviso de seguridad, descarga e
@@ -109,8 +73,8 @@
 		<div class="legend">
 			<span><span class="pill ok">200</span> responde</span>
 			<span><span class="pill login">302</span> redirige a login/dashboard</span>
-			<span><span class="pill warn">aviso</span> error preexistente</span>
-			<span><span class="pill err">error</span> no disponible</span>
+			<span><span class="pill err">off</span> no disponible</span>
+			<span><span class="pill unknown">&mdash;</span> sin datos</span>
 		</div>
 
 		<footer class="bottom">

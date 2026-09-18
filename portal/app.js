@@ -1,4 +1,6 @@
 (function () {
+  'use strict';
+
   function initials(text) {
     var words = text.trim().split(/\s+/).filter(function (w) { return w.length > 2; });
     if (words.length === 0) words = text.trim().split(/\s+/);
@@ -64,54 +66,65 @@
     btn.title = btn.getAttribute('aria-label');
   }
 
-  /* Etiquetas para el layout tipo tarjeta en móvil */
-  document.querySelectorAll('table.links').forEach(function (table) {
-    var ths = Array.prototype.map.call(table.querySelectorAll('thead th'), function (th) {
-      return th.textContent.trim();
-    });
-    table.querySelectorAll('tbody tr').forEach(function (tr) {
-      Array.prototype.forEach.call(tr.children, function (td, i) {
-        if (ths[i]) td.setAttribute('data-th', ths[i]);
+  /* Etiquetas para el layout tipo tarjeta en movil (se repite tras cada render) */
+  function addTableLabels() {
+    document.querySelectorAll('table.links').forEach(function (table) {
+      var ths = Array.prototype.map.call(table.querySelectorAll('thead th'), function (th) {
+        return th.textContent.trim();
+      });
+      table.querySelectorAll('tbody tr').forEach(function (tr) {
+        Array.prototype.forEach.call(tr.children, function (td, i) {
+          if (ths[i]) td.setAttribute('data-th', ths[i]);
+        });
       });
     });
-  });
+  }
 
-  document.querySelectorAll('.card[data-tech]').forEach(function (card) {
-    var box = document.createElement('div');
-    box.className = 'card-icons';
-    card.dataset.tech.split(',').forEach(function (t) {
-      t = t.trim();
-      box.appendChild(techImg(t, 'card-icon', names[t] || t));
+  function addCardIcons() {
+    document.querySelectorAll('.card[data-tech]').forEach(function (card) {
+      if (card.querySelector('.card-icons')) return;
+      var box = document.createElement('div');
+      box.className = 'card-icons';
+      card.dataset.tech.split(',').forEach(function (t) {
+        t = t.trim();
+        if (t) box.appendChild(techImg(t, 'card-icon', names[t] || t));
+      });
+      card.insertBefore(box, card.firstChild);
     });
-    card.insertBefore(box, card.firstChild);
-  });
+  }
 
-  document.querySelectorAll('td.name[data-tech]').forEach(function (td) {
-    var label = td.dataset.label || td.textContent;
-    var noBadge = td.dataset.badge === 'off';
+  function addNameIcons() {
+    document.querySelectorAll('td.name[data-tech]').forEach(function (td) {
+      if (td.dataset.icons === 'done') return;
+      td.dataset.icons = 'done';
 
-    if (!noBadge) {
-      td.insertBefore(
-        td.dataset.app ? appImg(td.dataset.app, label, td.dataset.color)
-                       : badge(label, td.dataset.color),
-        td.firstChild
-      );
-    }
+      var label = td.dataset.label || td.textContent;
+      var noBadge = td.dataset.badge === 'off';
 
-    td.dataset.tech.split(',').forEach(function (t) {
-      t = t.trim();
-      var img = techImg(t, noBadge ? 'tech-lg' : 'tech', names[t] || t);
-      if (noBadge) {
-        td.insertBefore(img, td.firstChild);
-      } else {
-        td.appendChild(img);
+      if (!noBadge && !td.querySelector('.app-badge, .app-icon')) {
+        td.insertBefore(
+          td.dataset.app ? appImg(td.dataset.app, label, td.dataset.color)
+                         : badge(label, td.dataset.color),
+          td.firstChild
+        );
       }
-    });
-  });
 
-  /* Conmutador de tema claro/oscuro */
-  var header = document.querySelector('header.top');
-  if (header) {
+      td.dataset.tech.split(',').forEach(function (t) {
+        t = t.trim();
+        if (!t) return;
+        var img = techImg(t, noBadge ? 'tech-lg' : 'tech', names[t] || t);
+        if (noBadge) {
+          td.insertBefore(img, td.firstChild);
+        } else {
+          td.appendChild(img);
+        }
+      });
+    });
+  }
+
+  function addThemeToggle() {
+    var header = document.querySelector('header.top');
+    if (!header || header.querySelector('.theme-toggle')) return;
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'theme-toggle';
@@ -124,4 +137,14 @@
     });
     header.appendChild(btn);
   }
+
+  function enhance() {
+    addTableLabels();
+    addCardIcons();
+    addNameIcons();
+    addThemeToggle();
+  }
+
+  document.addEventListener('portal:rendered', enhance);
+  enhance();
 })();

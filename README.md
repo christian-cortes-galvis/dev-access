@@ -7,12 +7,14 @@ que reiniciar `ubuntu-docker` (192.168.0.87, donde corren las apps) no deje sin 
 ## Contenido
 
 ```
-docker-compose.yml                 # nginx:stable, network_mode host, 80/443
+docker-compose.yml                 # nginx:stable + portal-api, network_mode host
 nginx/conf.d/
-  index.conf                       # index.cortexdev.lan  → portal/
+  index.conf                       # index.cortexdev.lan  → portal/ + /api/
   ca.conf                          # ca.cortexdev.lan     → ca.pem
   infra.conf                       # pihole, proxmox, backups/pbs, uptime/kuma, netdata-*
-portal/                            # índice estático (HTML/CSS/JS, favicons, iconos)
+portal/                            # portal (shells HTML + render.js, favicons, iconos)
+backend/                           # portal-api: FastAPI + SQLite (catalogo y estado)
+backend/catalog.yml                # catalogo de servicios (fuente de verdad, se edita aqui)
 certs/                             # gitignored; wildcard *.cortexdev.lan + CA (install-certs.sh)
 systemd/access-ingress.service.template
 scripts/install-certs.sh
@@ -60,7 +62,7 @@ INSTALL_SYSTEMD=1 scripts/deploy.sh
 ## Actualizar
 
 ```bash
-scripts/deploy.sh                 # git pull + docker compose up -d
+scripts/deploy.sh                 # git pull + docker compose up -d --build
 ```
 
 ## Validar
@@ -123,6 +125,32 @@ Y mantener el wildcard a las apps:
 ```
 address=/cortexdev.lan/192.168.0.87
 ```
+
+## Portal dinámico (catálogo + estado)
+
+El portal ya no lleva las listas hardcodeadas: `portal-api` (contenedor `portal_api`, FastAPI +
+SQLite) guarda el catálogo de servicios y comprueba su estado.
+
+- Catálogo: `backend/catalog.yml` es la fuente de verdad. Al arrancar (y en cada
+  `scripts/deploy.sh`) se sincroniza por `slug` con `/data/portal.db`; los servicios que se
+  quitan del YAML se desactivan (no se borra el histórico).
+- Sondeos: cada `POLL_INTERVAL` (30s) `portal_api` hace GET contra la URL pública de cada
+  servicio (`probe_url` opcional), sin seguir redirecciones, con timeout de `PROBE_TIMEOUT`.
+  Un código en `accept` es online (2xx) o login (3xx/401/403); timeout, error o 5xx = offline.
+  Los Netdata usan `/api/v1/info` para no cargar el dashboard.
+- API (bajo `index.cortexdev.lan/api/`, bind local `127.0.0.1:8088`):
+  - `GET /api/health` → estado de la BD.
+  - `GET /api/portal` → catálogo + categorías + estado + `uptime_24h`.
+  - `GET /api/status[?refresh=1]` → solo estados, para el refresco del navegador (cada 20s).
+- Histórico: tabla `checks` con retención de 7 días (`RETENTION_DAYS`); el portal muestra el %
+  de disponibilidad 24h.
+- Frontend: `portal/render.js` pinta tablas, tarjetas y contadores desde `/api/portal` y
+  refresca los pills desde `/api/status`. Si `portal_api` cae, las páginas cargan con un aviso.
+- Añadir/editar servicios: editar `backend/catalog.yml` y ejecutar `scripts/deploy.sh`
+  (idempotente). No hay que tocar los HTML.
+
+Variables de `portal_api` (compose): `DB_PATH`, `CATALOG_PATH`, `CA_PATH` (CA local para
+verificar TLS), `POLL_INTERVAL`, `PROBE_TIMEOUT`, `RETENTION_DAYS`.
 
 ## Seguridad
 

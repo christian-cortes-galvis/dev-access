@@ -109,7 +109,7 @@ else
 fi
 
 info "4/5 Levantando nginx de acceso"
-docker compose up -d || bad "docker compose up -d fallo"
+docker compose up -d --build || bad "docker compose up -d --build fallo"
 sleep 2
 st="$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)"
 if [ "$st" = "running" ] && docker exec access_nginx sh -c 'ls /etc/nginx/conf.d/*.conf >/dev/null 2>&1'; then

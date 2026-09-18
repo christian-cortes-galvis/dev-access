@@ -32,8 +32,8 @@ if ! ls nginx/conf.d/*.conf >/dev/null 2>&1; then
   exit 1
 fi
 
-log "docker compose up -d"
-docker compose up -d
+log "docker compose up -d --build"
+docker compose up -d --build
 
 status="$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)"
 if [ "$status" = "running" ] && ! docker exec access_nginx sh -c 'ls /etc/nginx/conf.d/*.conf >/dev/null 2>&1'; then

@@ -1,0 +1,371 @@
+# Catálogo del portal CortexDev (fuente de verdad).
+# Al arrancar, portal-api lo sincroniza (upsert por slug) con SQLite.
+# Añadir/editar un servicio = editar este archivo + scripts/deploy.sh.
+settings:
+  poll_interval_seconds: 30
+  probe_timeout_seconds: 5
+  retention_days: 7
+  default_method: GET
+  default_accept: [200, 301, 302, 303, 307, 308, 401, 403]
+
+categories:
+  - slug: infraestructura
+    title: Infraestructura
+    description: Portainer, Proxmox VE, Proxmox Backup Server, Pi-hole, Uptime Kuma y Netdata (uno por servidor).
+    url: /infraestructura.html
+    note_header: Destino
+    count_label: servicios
+    card_tech: [server, portainer, proxmox]
+  - slug: laravel
+    title: Laravel
+    description: Aplicaciones PHP 8.3 servidas por <code>laravel_web</code> (FPM).
+    url: /laravel.html
+    note_header: Nota
+    count_label: proyectos
+    card_tech: [laravel]
+  - slug: codeigniter
+    title: CodeIgniter / PHP
+    description: Apps PHP 8.1 bajo <code>apps.cortexdev.lan/&lt;ruta&gt;</code> y <code>csr-twofa</code>.
+    url: /codeigniter.html
+    note_header: Nota
+    count_label: apps
+    card_tech: [codeigniter, php]
+  - slug: spas
+    title: SPAs y utilidades
+    description: Portal Pacientes (Angular), Centro de Apoyo (React), Bot Gomedisys y phpMyAdmin.
+    url: /spas.html
+    note_header: Nota
+    count_label: apps
+    card_tech: [angular, react, python]
+
+services:
+  # ----------------------------- Infraestructura ---------------------------
+  - slug: portainer
+    name: Portainer CE
+    category: infraestructura
+    url: https://portainer.cortexdev.lan
+    tech: [portainer]
+    badge: false
+    note: "<code>portainer:9000</code> (docker)"
+    sort: 10
+  - slug: proxmox
+    name: Proxmox VE
+    category: infraestructura
+    url: https://proxmox.cortexdev.lan
+    tech: [proxmox]
+    badge: false
+    note: "192.168.0.224:8006"
+    sort: 20
+  - slug: backups
+    name: Proxmox Backup Server
+    category: infraestructura
+    url: https://backups.cortexdev.lan
+    tech: [proxmox]
+    badge: false
+    note: 'PBS 192.168.0.166:8007 &middot; alias <a href="https://pbs.cortexdev.lan" target="_blank" rel="noopener">pbs</a>'
+    sort: 30
+  - slug: pihole
+    name: Pi-hole
+    category: infraestructura
+    url: https://pihole.cortexdev.lan
+    tech: [pihole]
+    badge: false
+    note: "192.168.0.49 &rarr; <code>/admin/</code> (DNS de la LAN)"
+    sort: 40
+  - slug: uptime
+    name: Uptime Kuma
+    category: infraestructura
+    url: https://uptime.cortexdev.lan
+    tech: [uptime-kuma]
+    badge: false
+    note: '192.168.0.49:3001 &rarr; <code>/dashboard</code> &middot; alias <a href="https://kuma.cortexdev.lan" target="_blank" rel="noopener">kuma</a>'
+    sort: 50
+  - slug: netdata-backups
+    name: "Netdata · proxmox-backups"
+    category: infraestructura
+    url: https://netdata-backups.cortexdev.lan
+    probe_url: https://netdata-backups.cortexdev.lan/api/v1/info
+    accept: [200]
+    tech: [netdata]
+    badge: false
+    note: "192.168.0.166:19999"
+    sort: 60
+  - slug: netdata-proxmox
+    name: "Netdata · proxmox-server"
+    category: infraestructura
+    url: https://netdata-proxmox.cortexdev.lan
+    probe_url: https://netdata-proxmox.cortexdev.lan/api/v1/info
+    accept: [200]
+    tech: [netdata]
+    badge: false
+    note: "192.168.0.224:19999"
+    sort: 70
+  - slug: netdata-docker
+    name: "Netdata · ubuntu-docker"
+    category: infraestructura
+    url: https://netdata-docker.cortexdev.lan
+    probe_url: https://netdata-docker.cortexdev.lan/api/v1/info
+    accept: [200]
+    tech: [netdata]
+    badge: false
+    note: "192.168.0.87:19999"
+    sort: 80
+  - slug: netdata-services
+    name: "Netdata · ubuntu-services"
+    category: infraestructura
+    url: https://netdata-services.cortexdev.lan
+    probe_url: https://netdata-services.cortexdev.lan/api/v1/info
+    accept: [200]
+    tech: [netdata]
+    badge: false
+    note: "192.168.0.49:19999"
+    sort: 90
+
+  # -------------------------------- Laravel --------------------------------
+  - slug: analisis-datos
+    name: Analítica de datos
+    category: laravel
+    url: https://analisis-datos.cortexdev.lan
+    tech: [laravel]
+    icon: analisis-datos.png
+    color: "#0ea5e9"
+    note: "Redirige a <code>/login</code>"
+    sort: 100
+  - slug: app-admin
+    name: Admin App Móvil
+    category: laravel
+    url: https://app-admin.cortexdev.lan
+    tech: [laravel]
+    icon: app-admin.png
+    color: "#8b5cf6"
+    note: 'Alias: <a href="https://pacientes.cortexdev.lan" target="_blank" rel="noopener">pacientes</a> y <a href="https://empleados.cortexdev.lan" target="_blank" rel="noopener">empleados</a>'
+    sort: 110
+  - slug: ruta56
+    name: Ruta 56
+    category: laravel
+    url: https://ruta56.cortexdev.lan
+    tech: [laravel]
+    icon: ruta56.svg
+    color: "#f59e0b"
+    note: "&mdash;"
+    sort: 120
+  - slug: admin-portal-pacientes
+    name: Admin Portal Pacientes
+    category: laravel
+    url: https://admin-portal-pacientes.cortexdev.lan
+    tech: [laravel]
+    icon: admin-portal-pacientes.png
+    color: "#22c55e"
+    note: "API de Portal Pacientes"
+    sort: 130
+  - slug: gastro
+    name: Gastro
+    category: laravel
+    url: https://gastro.cortexdev.lan
+    tech: [laravel]
+    icon: gastro.png
+    color: "#ef4444"
+    note: "Redirige a <code>/admin/login</code>"
+    sort: 140
+  - slug: cafezam
+    name: Cafezam
+    category: laravel
+    url: https://cafezam.cortexdev.lan
+    tech: [laravel]
+    icon: cafezam.png
+    color: "#b45309"
+    note: "&mdash;"
+    sort: 150
+  - slug: csr-admin
+    name: CSR Admin
+    category: laravel
+    url: https://csr-admin.cortexdev.lan
+    tech: [laravel]
+    icon: csr-admin.png
+    color: "#6366f1"
+    note: "API de Centro de Apoyo"
+    sort: 160
+  - slug: coopsercont
+    name: Coopsercont
+    category: laravel
+    url: https://coopsercont.cortexdev.lan
+    tech: [laravel]
+    icon: coopsercont.png
+    color: "#14b8a6"
+    note: "Cooperativa Servicio Control"
+    sort: 170
+  - slug: tableros
+    name: Tableros
+    category: laravel
+    url: https://tableros.cortexdev.lan
+    tech: [laravel]
+    icon: tableros.png
+    color: "#0891b2"
+    note: "Dashboards"
+    sort: 180
+  - slug: sarlaft
+    name: SARLAFT
+    category: laravel
+    url: https://sarlaft.cortexdev.lan
+    tech: [laravel]
+    icon: sarlaft.png
+    color: "#e11d48"
+    note: "Redirige a <code>/login</code>"
+    sort: 190
+  - slug: glampings-club
+    name: Glampings Club
+    category: laravel
+    url: https://glampings-club.cortexdev.lan
+    tech: [laravel]
+    icon: glampings-club.png
+    color: "#84cc16"
+    note: "&mdash;"
+    sort: 200
+  - slug: sapg-laravel
+    name: SAPG
+    category: laravel
+    url: https://sapg.cortexdev.lan
+    tech: [laravel]
+    icon: sapg.png
+    color: "#06b6d4"
+    note: "Versión Laravel"
+    sort: 210
+
+  # --------------------------- CodeIgniter / PHP ---------------------------
+  - slug: csr-support
+    name: CSR Support
+    category: codeigniter
+    url: https://apps.cortexdev.lan/csr-support/
+    tech: [codeigniter]
+    icon: csr-support.png
+    color: "#ef4223"
+    note: "CodeIgniter 3"
+    sort: 300
+  - slug: sapg-ci
+    name: SAPG
+    category: codeigniter
+    url: https://apps.cortexdev.lan/sapg/
+    tech: [codeigniter]
+    icon: sapg.png
+    color: "#06b6d4"
+    note: "CodeIgniter 3"
+    sort: 310
+  - slug: enter
+    name: Enter
+    category: codeigniter
+    url: https://apps.cortexdev.lan/enter/
+    tech: [codeigniter]
+    icon: enter.png
+    color: "#0ea5e9"
+    note: "CodeIgniter 3"
+    sort: 320
+  - slug: gastro33-snappy
+    name: Gastro33 Snappy
+    category: codeigniter
+    url: https://apps.cortexdev.lan/gastro33-snappy/
+    tech: [php]
+    icon: gastro33.png
+    color: "#7c3aed"
+    note: "PHP custom"
+    sort: 330
+  - slug: gastro33-solicitudes
+    name: Gastro33 Solicitudes
+    category: codeigniter
+    url: https://apps.cortexdev.lan/gastro33-solicitudes/
+    tech: [php]
+    icon: gastro33.png
+    color: "#8b5cf6"
+    note: "PHP custom"
+    sort: 340
+  - slug: ticware-web
+    name: Ticware Web
+    category: codeigniter
+    url: https://apps.cortexdev.lan/ticware_web/
+    tech: [php]
+    icon: ticware_web.png
+    color: "#6d28d9"
+    note: "PHP estático"
+    sort: 350
+  - slug: powerbi
+    name: PowerBI
+    category: codeigniter
+    url: https://apps.cortexdev.lan/powerbi/
+    tech: [powerbi]
+    icon: powerbi.png
+    color: "#ca8a04"
+    note: "CodeIgniter 3"
+    sort: 360
+  - slug: sapio
+    name: Sapio
+    category: codeigniter
+    url: https://apps.cortexdev.lan/sapio/
+    tech: [php]
+    icon: sapio.png
+    color: "#a855f7"
+    note: "PHP custom (MVC + sockets)"
+    sort: 370
+  - slug: historias-clinicas
+    name: Historias Clínicas
+    category: codeigniter
+    url: https://apps.cortexdev.lan/historias_clinicas/
+    tech: [php]
+    icon: historias_clinicas.png
+    color: "#ec4899"
+    note: "PHP"
+    sort: 380
+  - slug: chequeos
+    name: Chequeos
+    category: codeigniter
+    url: https://apps.cortexdev.lan/chequeos/
+    tech: [php]
+    icon: chequeos.png
+    color: "#f97316"
+    note: "Página estática"
+    sort: 390
+
+  # --------------------------- SPAs y utilidades ---------------------------
+  - slug: portal-pacientes
+    name: Portal Pacientes
+    category: spas
+    url: https://portal-pacientes.cortexdev.lan
+    tech: [angular]
+    icon: portal-pacientes.png
+    color: "#dd0031"
+    note: 'Angular 21 (dev server 4200). <code>/api/</code> &rarr; <code>admin-portal-pacientes.cortexdev.win</code>'
+    sort: 400
+  - slug: centro-apoyo
+    name: Centro de Apoyo
+    category: spas
+    url: https://centro-apoyo.cortexdev.lan
+    tech: [react]
+    icon: centro-apoyo.png
+    color: "#0891b2"
+    note: "React 17 &rarr; redirige a <code>/centro-apoyo/</code>"
+    sort: 410
+  - slug: bot-gomedisys
+    name: Bot Gomedisys
+    category: spas
+    url: https://bot-gomedisys.cortexdev.lan
+    tech: [python]
+    icon: bot-gomedisys.png
+    color: "#3776ab"
+    note: "Python 3.12 + Playwright, puerto 6000"
+    sort: 420
+  - slug: pma
+    name: phpMyAdmin
+    category: spas
+    url: https://pma.cortexdev.lan
+    tech: [phpmyadmin]
+    badge: false
+    note: "Administración de MySQL"
+    sort: 430
+  - slug: ca
+    name: CA local (mkcert)
+    category: spas
+    url: http://ca.cortexdev.lan/
+    probe_url: http://ca.cortexdev.lan/cortexdev-lan-ca.crt
+    accept: [200]
+    tech: [certificate]
+    badge: false
+    note: "Descarga <code>cortexdev-lan-ca.crt</code> para confiar en <code>*.cortexdev.lan</code>"
+    sort: 440

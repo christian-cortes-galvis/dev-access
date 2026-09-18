@@ -28,13 +28,15 @@ for f in cortexdev.lan.pem cortexdev.lan-key.pem ca.pem; do
   fi
 done
 
-info "Contenedor"
-status="$(docker inspect --format '{{.State.Status}}' access_nginx 2>/dev/null || true)"
-if [ "$status" = "running" ]; then
-  ok "access_nginx running"
-else
-  bad "access_nginx no esta corriendo (docker compose up -d)"
-fi
+info "Contenedores"
+for c in access_nginx portal_api; do
+  status="$(docker inspect --format '{{.State.Status}}' "$c" 2>/dev/null || true)"
+  if [ "$status" = "running" ]; then
+    ok "$c running"
+  else
+    bad "$c no esta corriendo (docker compose up -d --build)"
+  fi
+done
 
 info "HTTP local (Host header, sin depender del DNS)"
 code() { curl -sk -o /dev/null -w '%{http_code}' -H "Host: $1" "https://127.0.0.1$2" || true; }
@@ -77,6 +79,22 @@ else
   bad "ca.cortexdev.lan /cortexdev-lan-ca.crt -> $c"
 fi
 
+info "API del portal (portal-api)"
+c="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8088/api/health || true)"
+if [ "$c" = "200" ]; then
+  ok "GET /api/health -> 200"
+else
+  bad "GET /api/health -> ${c:-000} (docker logs --tail 40 portal_api)"
+fi
+
+body="$(curl -sk -H 'Host: index.cortexdev.lan' https://127.0.0.1/api/portal 2>/dev/null || true)"
+if printf '%s' "$body" | grep -q '"services"'; then
+  n="$(printf '%s' "$body" | grep -o '"category"' | wc -l)"
+  ok "GET /api/portal -> catalogo ($n servicios)"
+else
+  bad "GET /api/portal sin catalogo (docker logs --tail 40 portal_api)"
+fi
+
 dig_answer() {
   local name="$1" out=""
   for _ in 1 2 3 4; do
@@ -110,7 +128,7 @@ fi
 
 info "Puertos"
 if command -v ss >/dev/null; then
-  for p in 80 443 8080 8443; do
+  for p in 80 443 8080 8443 8088; do
     if ss -ltn 2>/dev/null | grep -q ":$p "; then
       ok "puerto $p escuchando"
     else
