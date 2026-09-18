@@ -42,13 +42,20 @@ else
   echo "       Si es 403/404, Pi-hole sigue ocupando el 443:"
   echo "         - compose con puertos: usa 'docker compose up -d' (recrear, no 'restart')"
   echo "         - Pi-hole con network_mode: host: cambia 'webserver.port' (p. ej. 8080o,8443s) en pihole.toml"
-  echo "       Si es 000 estando access_nginx 'running', suele faltar config en el repo:"
-  echo "       --- docker compose logs --tail 15 ingress ---"
-  docker compose logs --tail 15 ingress 2>/dev/null || true
+  echo "       Si es 000 estando access_nginx 'running':"
+  echo "       --- NetworkMode / mounts ---"
+  docker inspect access_nginx --format '  NetworkMode={{.HostConfig.NetworkMode}}' 2>/dev/null || true
+  docker inspect access_nginx --format '{{range .Mounts}}  mount {{.Source}} -> {{.Destination}}{{println}}{{end}}' 2>/dev/null || true
+  echo "       --- git status (repo) ---"
+  git status --short 2>/dev/null || true
+  echo "       --- ls -la nginx/conf.d (host) ---"
+  ls -la nginx/conf.d 2>/dev/null || true
   echo "       --- docker exec access_nginx ls -la /etc/nginx/conf.d ---"
   docker exec access_nginx ls -la /etc/nginx/conf.d 2>/dev/null || true
-  echo "       --- docker exec access_nginx nginx -t ---"
-  docker exec access_nginx nginx -t 2>&1 || true
+  echo "       --- listen/server_name de la config cargada (nginx -T) ---"
+  docker exec access_nginx nginx -T 2>&1 | grep -E 'nginx:|listen|server_name' || true
+  echo "       --- docker compose logs --tail 15 ingress ---"
+  docker compose logs --tail 15 ingress 2>/dev/null || true
 fi
 
 c="$(code index.cortexdev.lan /laravel.html)"
