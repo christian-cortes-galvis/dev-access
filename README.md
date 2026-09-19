@@ -19,6 +19,7 @@ certs/                             # gitignored; wildcard *.cortexdev.lan + CA (
 systemd/access-ingress.service.template
 scripts/install-certs.sh
 scripts/dns-overrides.sh           # overrides DNS de la capa de acceso en Pi-hole (idempotente)
+scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole (acceso remoto .lan)
 scripts/deploy.sh
 scripts/check.sh
 scripts/setup-services.sh
@@ -32,6 +33,9 @@ scripts/setup-services.sh
   - **Docker**: publicar `8080:80` y `8443:443` en su compose y recrear con `docker compose up -d`
     (no `restart`), con `restart: unless-stopped`.
   `infra.conf` proxifica `pihole.cortexdev.lan` a `127.0.0.1:8443`.
+- Para acceso remoto por Tailscale, Pi-hole debe aceptar consultas del tailnet:
+  `sudo pihole-FTL --config dns.listeningMode ALL` y `sudo systemctl restart pihole-FTL`
+  (ver "Acceso remoto con Tailscale").
 - Los certificados (no están en git).
 
 ## Puesta en marcha
@@ -125,6 +129,63 @@ Y mantener el wildcard a las apps:
 ```
 address=/cortexdev.lan/192.168.0.87
 ```
+
+## Acceso remoto con Tailscale (los `.lan` siguen funcionando)
+
+Los equipos en la VPN Tailscale usan MagicDNS (`100.100.100.100`). Para que los enlaces guardados
+`https://<host>.cortexdev.lan` resuelvan fuera de la LAN, el tailnet necesita un **split DNS**
+(restricted nameserver) hacia Pi-hole. La subred `192.168.0.0/24` ya la anuncia `ubuntu-services`,
+así que solo falta el DNS.
+
+### 1. Split DNS en Tailscale (una vez, en la consola)
+
+En <https://console.tailscale.com/admin/dns>:
+
+- **Add nameserver** → **Custom** → `192.168.0.49`, restringido al dominio `cortexdev.lan`.
+- **No** actives "Override DNS servers" (solo ese dominio va a Pi-hole).
+- Opcional: añade `cortexdev.lan` a **Search domains** para escribir `index` a secas.
+- Si algún equipo usa **exit node**: activa "Use with exit node" en ese nameserver.
+
+En cada cliente: "Use Tailscale DNS settings" activado (por defecto) y rutas de subred aceptadas
+(Linux `sudo tailscale set --accept-routes`; Windows/Android/iOS: "Use Tailscale subnets").
+
+### 2. Pi-hole
+
+Debe aceptar consultas con origen del tailnet (`100.64.0.0/10`), que Pi-hole en modo `LOCAL`
+rechaza:
+
+```bash
+sudo pihole-FTL --config dns.listeningMode ALL
+sudo systemctl restart pihole-FTL
+```
+
+`ufw` está deshabilitado (`ENABLED=no`) y no bloquea. Si se habilita, permite 53 desde
+`192.168.0.0/24` y `100.64.0.0/10`.
+
+### 3. Confianza de la CA local en los clientes
+
+`https://` usa el wildcard mkcert; instala `certs/cortexdev.lan/ca.pem` una vez por equipo:
+
+- Linux: copiar a `/usr/local/share/ca-certificates/cortexdev-lan-ca.crt` y `sudo update-ca-certificates`.
+- Windows: `certutil -addstore -f Root ca.pem` (admin).
+- macOS: `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.pem`.
+- Android/iOS: instalar la CA como certificado de usuario y habilitar su confianza.
+
+El archivo se descarga en `http://ca.cortexdev.lan/` (HTTP) o desde el repo.
+
+### 4. Validar
+
+En `ubuntu-services`: `scripts/tailscale-dns.sh` (también se ejecuta dentro de `scripts/check.sh`).
+
+Desde un cliente remoto conectado solo por Tailscale:
+
+```bash
+dig +short index.cortexdev.lan @100.100.100.100   # 192.168.0.49
+dig +short app-admin.cortexdev.lan @100.100.100.100  # 192.168.0.87 (wildcard apps)
+curl -vI https://index.cortexdev.lan              # 200
+```
+
+Windows: `Resolve-DnsName index.cortexdev.lan` (no `nslookup`, no respeta el split DNS).
 
 ## Portal dinámico (catálogo + estado)
 

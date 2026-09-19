@@ -126,6 +126,21 @@ else
   bad "dig no instalado; no se pudo verificar DNS"
 fi
 
+info "Tailscale (acceso remoto a *.cortexdev.lan)"
+if command -v tailscale >/dev/null; then
+  if [ -x "$REPO_DIR/scripts/tailscale-dns.sh" ]; then
+    if "$REPO_DIR/scripts/tailscale-dns.sh"; then
+      ok "acceso remoto Tailscale OK"
+    else
+      bad "acceso remoto Tailscale con fallos (detalle arriba)"
+    fi
+  else
+    bad "falta scripts/tailscale-dns.sh (o no es ejecutable)"
+  fi
+else
+  warn "tailscale no instalado; omito la comprobacion de acceso remoto"
+fi
+
 info "Puertos"
 if command -v ss >/dev/null; then
   for p in 80 443 8080 8443 8088; do
