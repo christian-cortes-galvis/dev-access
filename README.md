@@ -27,6 +27,7 @@ scripts/add-app-win-vhost.sh       # en ubuntu-docker: añade un vhost proxy *.c
 scripts/apps-verify-win.sh         # en ubuntu-docker: verifica los vhosts .win de nginx_web
 scripts/apps-audit-lan.sh          # en ubuntu-docker: audita restos de dominio antiguo en apps
 scripts/apps-fix-acme-reload.sh    # en ubuntu-docker: asegura reload de nginx_web al renovar
+scripts/apps-retire-lan.sh         # en ubuntu-docker: desactiva el legado .lan del nginx de apps
 scripts/diagnose-host.sh           # diagnostica puertos/servicios de un host interno
 scripts/acme-renew.sh              # renovacion periodica (acme.sh --cron) para systemd
 scripts/dns-overrides.sh           # overrides DNS de la capa de acceso en Pi-hole (idempotente)
@@ -248,6 +249,9 @@ acceso.
 - Para añadir un vhost `.win` nuevo (proxy), en `ubuntu-docker`:
   `scripts/add-app-win-vhost.sh <host>.cortexdev.win <proxy_pass>` (atajo sin args:
   pma → `http://phpmyadmin:80`). Escribe el vhost con el cert `.win`, valida, recarga y verifica.
+- Legado `.lan`: el `cortexdev-lan.conf` del nginx de apps quedó inerte al retirar el DNS.
+  Para desactivarlo por completo: `scripts/apps-retire-lan.sh` (reporte) y luego
+  `--apply` (`[--fix-env] [--purge-certs]`) en ubuntu-docker.
 
 ## Portal dinámico (catálogo + estado)
 

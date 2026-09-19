@@ -392,6 +392,7 @@ scripts/tailscale-dns.sh
 | `scripts/apps-verify-win.sh` | `.87` | Verifica los vhosts `.win` de `nginx_web`, cert LE y que el catálogo tenga vhost. |
 | `scripts/apps-audit-lan.sh` | `.87` | Reporta restos de dominio antiguo (`.lan`) en `APP_URL`/cookies/CORS/`baseHref` de las apps. |
 | `scripts/apps-fix-acme-reload.sh` | `.87` | Asegura que la renovación del comodín en `.87` recargue `nginx_web`. |
+| `scripts/apps-retire-lan.sh` | `.87` | Desactiva el legado `.lan` del nginx de apps (Fase 4). |
 | `scripts/add-app-win-vhost.sh` | `.87` | Añade un vhost proxy `.win` nuevo. |
 | `scripts/diagnose-host.sh` | cualquiera | Diagnostica ruta/puertos de un host interno (p. ej. `.166`). |
 
@@ -406,3 +407,26 @@ scripts/apps-verify-win.sh
 scripts/apps-audit-lan.sh
 scripts/apps-fix-acme-reload.sh
 ```
+
+---
+
+## 13. Fase 4: retirar `.lan` del nginx de apps (ubuntu-docker)
+
+El `cortexdev-lan.conf` de `nginx_web` quedó inerte al retirar el DNS `.lan` (Fase 3). Para
+eliminarlo del todo, desde `ubuntu-docker` (donde está el repo):
+
+```bash
+cd ~/cortexdev-access
+scripts/apps-retire-lan.sh                          # reporte (no cambia nada)
+scripts/apps-retire-lan.sh --apply                  # desactiva cortexdev-lan.conf + reload + verifica
+scripts/apps-retire-lan.sh --apply --fix-env        # además corrige cortexdev.lan -> cortexdev.win en configs
+scripts/apps-retire-lan.sh --apply --purge-certs    # además desactiva certs/cortexdev.lan/
+```
+
+- Hace backup (`cortexdev-lan.conf.disabled-<ts>`) y renombra a `.disabled`, valida con `nginx -t`
+  y recarga; si falla, restaura el original.
+- `--fix-env` reescribe `.env`/compose/`*.conf` con dominio antiguo (backup `.bak-lan-<ts>`) y
+  recuerda reiniciar el servicio de cada app.
+- Verifica que los vhosts `.win` siguen sirviendo y que no queda ningún `server_name .lan`.
+- Rollback: renombrar `cortexdev-lan.conf.disabled` a `cortexdev-lan.conf` (o restaurar el backup) y
+  `docker exec nginx_web nginx -s reload`; los certs movidos a `.disabled-<ts>` se revierten igual.
