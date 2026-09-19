@@ -1,0 +1,12 @@
+[Unit]
+Description=Renovacion diaria del certificado *.cortexdev.win
+Requires=acme-renew.service
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=6h
+Persistent=true
+Unit=acme-renew.service
+
+[Install]
+WantedBy=timers.target

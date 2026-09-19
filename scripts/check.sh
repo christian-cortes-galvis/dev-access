@@ -27,6 +27,23 @@ for f in cortexdev.lan.pem cortexdev.lan-key.pem ca.pem; do
     bad "falta certs/cortexdev.lan/$f (corre scripts/install-certs.sh)"
   fi
 done
+for f in fullchain.pem key.pem; do
+  if [ -f "$REPO_DIR/certs/cortexdev.win/$f" ]; then
+    ok "cortexdev.win/$f"
+  else
+    bad "falta certs/cortexdev.win/$f (corre scripts/install-win-cert.sh)"
+  fi
+done
+win_cert="$REPO_DIR/certs/cortexdev.win/fullchain.pem"
+if [ -f "$win_cert" ]; then
+  win_iss="$(openssl x509 -in "$win_cert" -noout -issuer 2>/dev/null | sed 's/^issuer=//')"
+  win_sub="$(openssl x509 -in "$win_cert" -noout -subject 2>/dev/null | sed 's/^subject=//')"
+  if [ -n "$win_iss" ] && [ "$win_iss" = "$win_sub" ]; then
+    warn "cortexdev.win/fullchain.pem es provisional autofirmado; emite con scripts/install-win-cert.sh --issue"
+  else
+    ok "cortexdev.win/fullchain.pem emitido por CA ($win_iss)"
+  fi
+fi
 
 info "Contenedores"
 for c in access_nginx portal_api; do
@@ -79,6 +96,27 @@ else
   bad "ca.cortexdev.lan /cortexdev-lan-ca.crt -> $c"
 fi
 
+# Dominio publico: sin -k (valida la cadena real). --resolve evita depender del
+# DNS del host durante la puesta en marcha.
+code_strict() {
+  curl -sS -o /dev/null -w '%{http_code}' --resolve "$1:443:127.0.0.1" "https://$1$2" 2>/dev/null || true
+}
+
+c="$(code_strict index.cortexdev.win /)"
+if [ "$c" = "200" ]; then
+  ok "index.cortexdev.win / -> 200 (cert publico valido)"
+else
+  bad "index.cortexdev.win / -> ${c:-000} sin -k"
+  echo "       Si es 000 con cert provisional: emite con scripts/install-win-cert.sh --issue"
+fi
+
+c="$(code_strict ca.cortexdev.win /cortexdev-lan-ca.crt)"
+if [ "$c" = "200" ]; then
+  ok "ca.cortexdev.win /cortexdev-lan-ca.crt -> 200 (cert publico valido)"
+else
+  bad "ca.cortexdev.win /cortexdev-lan-ca.crt -> ${c:-000} sin -k"
+fi
+
 info "API del portal (portal-api)"
 c="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8088/api/health || true)"
 if [ "$c" = "200" ]; then
@@ -107,26 +145,28 @@ dig_answer() {
 
 info "DNS (Pi-hole local)"
 if command -v dig >/dev/null; then
-  for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
-    r="$(dig_answer "$h.cortexdev.lan")"
-    if [ "$r" = "192.168.0.49" ]; then
-      ok "$h.cortexdev.lan -> 192.168.0.49"
+  for d in cortexdev.lan cortexdev.win; do
+    for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
+      r="$(dig_answer "$h.$d")"
+      if [ "$r" = "192.168.0.49" ]; then
+        ok "$h.$d -> 192.168.0.49"
+      else
+        bad "$h.$d -> ${r:-sin respuesta} (falta el override en misc.dnsmasq_lines)"
+      fi
+    done
+
+    r="$(dig_answer "app-admin.$d")"
+    if [ "$r" = "192.168.0.87" ]; then
+      ok "app-admin.$d -> 192.168.0.87 (wildcard apps)"
     else
-      bad "$h.cortexdev.lan -> ${r:-sin respuesta} (falta el override en misc.dnsmasq_lines)"
+      bad "app-admin.$d -> ${r:-sin respuesta}"
     fi
   done
-
-  r="$(dig_answer app-admin.cortexdev.lan)"
-  if [ "$r" = "192.168.0.87" ]; then
-    ok "app-admin.cortexdev.lan -> 192.168.0.87 (wildcard apps)"
-  else
-    bad "app-admin.cortexdev.lan -> ${r:-sin respuesta}"
-  fi
 else
   bad "dig no instalado; no se pudo verificar DNS"
 fi
 
-info "Tailscale (acceso remoto a *.cortexdev.lan)"
+info "Tailscale (acceso remoto a *.cortexdev.lan y *.cortexdev.win)"
 if command -v tailscale >/dev/null; then
   if [ -x "$REPO_DIR/scripts/tailscale-dns.sh" ]; then
     if "$REPO_DIR/scripts/tailscale-dns.sh"; then

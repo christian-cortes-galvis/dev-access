@@ -3,6 +3,11 @@
 # Aplica los overrides DNS de la capa de acceso en Pi-hole (idempotente).
 # Se ejecuta EN ubuntu-services: scripts/dns-overrides.sh
 #
+# Gestiona los dos dominios internos:
+#   *.cortexdev.lan  wildcard a las apps + overrides de la capa de acceso
+#   *.cortexdev.win  wildcard a las apps + overrides de la capa de acceso
+# (dnsmasq usa la coincidencia mas especifica: el host gana al wildcard)
+#
 # Variables:
 #   PIHOLE     nombre del contenedor de Pi-hole (solo modo docker; autodetectado si se omite)
 #   HOSTS      hosts de la capa de acceso separados por espacios
@@ -16,6 +21,8 @@ ACCESS_IP="${ACCESS_IP:-192.168.0.49}"
 APPS_IP="${APPS_IP:-192.168.0.87}"
 HOSTS="${HOSTS:-index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker}"
 WILDCARD="address=/cortexdev.lan/${APPS_IP}"
+PUB_DOMAIN="cortexdev.win"
+WILDCARD_PUB="address=/${PUB_DOMAIN}/${APPS_IP}"
 
 FAIL=0
 info() { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -79,8 +86,12 @@ add() {
 }
 
 add "$WILDCARD"
+add "$WILDCARD_PUB"
 while IFS= read -r l; do add "$l"; done <<< "$existing"
-for h in $HOSTS; do add "address=/${h}.cortexdev.lan/${ACCESS_IP}"; done
+for h in $HOSTS; do
+  add "address=/${h}.cortexdev.lan/${ACCESS_IP}"
+  add "address=/${h}.${PUB_DOMAIN}/${ACCESS_IP}"
+done
 
 json="["
 sep=""
@@ -129,20 +140,22 @@ info "4/4 Verificacion (dig @127.0.0.1)"
 if ! command -v dig >/dev/null; then
   bad "dig no instalado; no se pudo verificar"
 else
-  for h in $HOSTS; do
-    r="$(dig_answer "${h}.cortexdev.lan")"
-    if [ "$r" = "$ACCESS_IP" ]; then
-      ok "${h}.cortexdev.lan -> $ACCESS_IP"
+  for d in cortexdev.lan "$PUB_DOMAIN"; do
+    for h in $HOSTS; do
+      r="$(dig_answer "${h}.${d}")"
+      if [ "$r" = "$ACCESS_IP" ]; then
+        ok "${h}.${d} -> $ACCESS_IP"
+      else
+        bad "${h}.${d} -> ${r:-sin respuesta}"
+      fi
+    done
+    r="$(dig_answer "app-admin.${d}")"
+    if [ "$r" = "$APPS_IP" ]; then
+      ok "app-admin.${d} -> $APPS_IP (wildcard apps)"
     else
-      bad "${h}.cortexdev.lan -> ${r:-sin respuesta}"
+      bad "app-admin.${d} -> ${r:-sin respuesta} (wildcard roto)"
     fi
   done
-  r="$(dig_answer app-admin.cortexdev.lan)"
-  if [ "$r" = "$APPS_IP" ]; then
-    ok "app-admin.cortexdev.lan -> $APPS_IP (wildcard apps)"
-  else
-    bad "app-admin.cortexdev.lan -> ${r:-sin respuesta} (wildcard roto)"
-  fi
 fi
 
 if [ "$FAIL" != "0" ]; then

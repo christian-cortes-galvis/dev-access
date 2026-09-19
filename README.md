@@ -9,20 +9,26 @@ que reiniciar `ubuntu-docker` (192.168.0.87, donde corren las apps) no deje sin 
 ```
 docker-compose.yml                 # nginx:stable + portal-api, network_mode host
 nginx/conf.d/
-  index.conf                       # index.cortexdev.lan  → portal/ + /api/
-  ca.conf                          # ca.cortexdev.lan     → ca.pem
+  index.conf                       # index.cortexdev.{lan,win}  → portal/ + /api/
+  ca.conf                          # ca.cortexdev.{lan,win}     → ca.pem
   infra.conf                       # pihole, proxmox, backups/pbs, uptime/kuma, netdata-*
+  snippets/                        # cuerpos compartidos y pares TLS por dominio
 portal/                            # portal (shells HTML + render.js, favicons, iconos)
 backend/                           # portal-api: FastAPI + SQLite (catalogo y estado)
 backend/catalog.yml                # catalogo de servicios (fuente de verdad, se edita aqui)
-certs/                             # gitignored; wildcard *.cortexdev.lan + CA (install-certs.sh)
+certs/                             # gitignored; wildcard *.cortexdev.lan (+CA) y *.cortexdev.win
 systemd/access-ingress.service.template
+systemd/acme-renew.service.template
+systemd/acme-renew.timer
 scripts/install-certs.sh
+scripts/install-win-cert.sh        # cert *.cortexdev.win: provisional / emision Let's Encrypt
+scripts/acme-renew.sh              # renovacion periodica (acme.sh --cron) para systemd
 scripts/dns-overrides.sh           # overrides DNS de la capa de acceso en Pi-hole (idempotente)
-scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole (acceso remoto .lan)
+scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole (acceso remoto .lan/.win)
 scripts/deploy.sh
 scripts/check.sh
 scripts/setup-services.sh
+INSTALACION-cortexdev-win.md       # runbook paso a paso: Cloudflare, emision, DNS y Tailscale
 ```
 
 ## Requisitos en ubuntu-services
@@ -86,6 +92,14 @@ curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: index.cortexdev.lan' https:/
 curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: ca.cortexdev.lan' https://127.0.0.1/cortexdev-lan-ca.crt  # 200
 dig +short index.cortexdev.lan @127.0.0.1      # 192.168.0.49
 dig +short app-admin.cortexdev.lan @127.0.0.1  # 192.168.0.87
+
+# Dominio publico (cert real: sin -k)
+curl -sSI https://index.cortexdev.win/                          # 200
+curl -sSI https://ca.cortexdev.win/cortexdev-lan-ca.crt         # 200
+dig +short index.cortexdev.win @127.0.0.1                       # 192.168.0.49
+openssl s_client -connect 192.168.0.49:443 -servername index.cortexdev.win  # issuer Let's Encrypt, SAN *.cortexdev.win
+# No debe existir DNS publico del dominio:
+dig +short index.cortexdev.win @1.1.1.1                         # vacio
 ```
 
 Desde cualquier equipo de la LAN: `https://index.cortexdev.lan` (sin `-k` si ya confía en la CA).
@@ -124,11 +138,16 @@ address=/netdata-proxmox.cortexdev.lan/192.168.0.49
 address=/netdata-docker.cortexdev.lan/192.168.0.49
 ```
 
-Y mantener el wildcard a las apps:
+Y mantener los wildcards a las apps:
 
 ```
 address=/cortexdev.lan/192.168.0.87
+address=/cortexdev.win/192.168.0.87
 ```
+
+`scripts/dns-overrides.sh` escribe lo mismo para los hosts `.cortexdev.win` (el wildcard va a las
+apps y cada host de la capa de acceso a `192.168.0.49`); dnsmasq usa la coincidencia más
+específica. Ver "Dominio interno con certificado público".
 
 ## Acceso remoto con Tailscale (los `.lan` siguen funcionando)
 
@@ -142,6 +161,7 @@ así que solo falta el DNS.
 En <https://console.tailscale.com/admin/dns>:
 
 - **Add nameserver** → **Custom** → `192.168.0.49`, restringido al dominio `cortexdev.lan`.
+  Repetir para `cortexdev.win` (ver "Dominio interno con certificado público").
 - **No** actives "Override DNS servers" (solo ese dominio va a Pi-hole).
 - Opcional: añade `cortexdev.lan` a **Search domains** para escribir `index` a secas.
 - Si algún equipo usa **exit node**: activa "Use with exit node" en ese nameserver.
@@ -187,6 +207,75 @@ curl -vI https://index.cortexdev.lan              # 200
 
 Windows: `Resolve-DnsName index.cortexdev.lan` (no `nslookup`, no respeta el split DNS).
 
+## Dominio interno con certificado público (`*.cortexdev.win`)
+
+Los dashboards se sirven también como `*.cortexdev.win` con un certificado comodín de
+**Let's Encrypt**, de modo que **no aparece el aviso de certificado** aunque el equipo no tenga
+instalada la CA de mkcert. El dominio sigue siendo interno: no se publica ningún A/AAAA ni se
+abren puertos, y el DNS lo resuelve Pi-hole dentro de la LAN o el split DNS de Tailscale.
+
+> Runbook completo con todos los comandos (Cloudflare, emisión, renovación, DNS y Tailscale):
+> [`INSTALACION-cortexdev-win.md`](INSTALACION-cortexdev-win.md).
+
+- `cortexdev.lan` **sigue vigente** (enlaces guardados y equipos con la CA mkcert instalada).
+- Emisión por **DNS-01 con Cloudflare** (obligatorio: es comodín y no se exponen 80/443).
+- La zona de Cloudflare no debe tener registros A/AAAA de servicio: solo NS/SOA y el TXT
+  temporal `_acme-challenge` que acme.sh crea y borra. Si existe un wildcard público (p. ej.
+  `*.cortexdev.win A 192.168.0.87`) hay que eliminarlo en el panel de Cloudflare.
+
+### Emisión y credencial (una vez)
+
+El token de Cloudflare necesita el permiso `Zone:DNS:Edit` sobre `cortexdev.win`:
+
+```bash
+sudo install -d -m 700 /etc/cortexdev
+printf 'CF_Token=<token>\n' | sudo tee /etc/cortexdev/acme.env >/dev/null
+sudo chmod 600 /etc/cortexdev/acme.env
+```
+
+Luego, en `ubuntu-services` (root):
+
+```bash
+# 1. Ensayo en staging (evita el rate limit de produccion; no instala nada)
+sudo scripts/install-win-cert.sh --staging
+
+# 2. Emision real e instalacion en certs/cortexdev.win/ + recarga de nginx
+sudo scripts/install-win-cert.sh --issue
+
+# 3. Estado del certificado
+scripts/install-win-cert.sh --status
+```
+
+Mientras no se emita el real, `scripts/install-win-cert.sh` (y `deploy.sh`/`setup-services.sh`)
+generan un **provisional autofirmado** para que nginx arranque; los navegadores avisarán en ese
+periodo. El par (`certs/cortexdev.win/{fullchain.pem,key.pem}`) está **gitignored** y la key se
+fuerza a `600`: el comodín permite suplantar cualquier host de un nivel bajo el dominio.
+
+### Renovación
+
+`systemd/acme-renew.{service,timer}` ejecutan `scripts/acme-renew.sh` (root) a diario. El
+`--reloadcmd` guardado por acme.sh recarga `access_nginx` tras renovar. Instalar con:
+
+```bash
+INSTALL_SYSTEMD=1 scripts/deploy.sh      # instala access-ingress + acme-renew.timer
+systemctl list-timers | grep acme
+```
+
+### nginx: un `server` por dominio
+
+nginx **no** selecciona por SNI entre dos `ssl_certificate` del mismo tipo dentro de un mismo
+bloque (el último RSA pisa al anterior). Por eso cada servicio tiene dos bloques `listen 443 ssl`:
+uno con el cert mkcert (`.lan`) y otro con el de Let's Encrypt (`.win`). El cuerpo de cada
+servicio se comparte en `nginx/conf.d/snippets/` y los pares TLS en `snippets/tls-{lan,win}.conf`.
+
+### DNS
+
+Pi-hole (`scripts/dns-overrides.sh`) publica el wildcard de apps y los overrides de la capa de
+acceso para ambos dominios (`address=/cortexdev.win/192.168.0.87` y
+`address=/<host>.cortexdev.win/192.168.0.49`). En Tailscale (<https://console.tailscale.com/admin/dns>)
+hay que añadir un segundo **restricted nameserver** `192.168.0.49 → cortexdev.win` (además de
+`cortexdev.lan`); si algún equipo usa exit node, activar "Use with exit node".
+
 ## Portal dinámico (catálogo + estado)
 
 El portal ya no lleva las listas hardcodeadas: `portal-api` (contenedor `portal_api`, FastAPI +
@@ -218,4 +307,7 @@ verificar TLS), `POLL_INTERVAL`, `PROBE_TIMEOUT`, `RETENTION_DAYS`.
 - `certs/` está en `.gitignore`: **nunca** subir `.pem`/llaves privadas, ni siquiera en un repo
   privado. Si la llave se filtra, regenerar el wildcard con `mkcert` y volver a instalar la CA
   en los equipos.
+- La llave del comodín público `certs/cortexdev.win/key.pem` (permisos `600`) permite suplantar
+  cualquier host de un nivel bajo `cortexdev.win`. No versionarla y, si se filtra, revocar y
+  reemitir con `scripts/install-win-cert.sh --issue`.
 - El repo debe ser **privado**.

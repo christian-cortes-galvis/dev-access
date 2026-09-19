@@ -32,6 +32,12 @@ if ! ls nginx/conf.d/*.conf >/dev/null 2>&1; then
   exit 1
 fi
 
+# nginx referencia el par .win; si no existe, nginx no arranca. Genera un
+# provisional autofirmado (se reemplaza al emitir con install-win-cert.sh --issue).
+if [ -x scripts/install-win-cert.sh ]; then
+  scripts/install-win-cert.sh --ensure || log "AVISO: no pude asegurar el certificado *.cortexdev.win"
+fi
+
 log "docker compose up -d --build"
 docker compose up -d --build
 
@@ -60,6 +66,18 @@ if [ "${INSTALL_SYSTEMD:-0}" = "1" ]; then
   rm -f "$unit_tmp"
   sudo systemctl daemon-reload
   sudo systemctl enable --now access-ingress.service
+
+  if [ -f "$REPO_DIR/systemd/acme-renew.timer" ]; then
+    acme_tmp="$(mktemp)"
+    sed -e "s|__REMOTE_DIR__|$REPO_DIR|g" -e "s|__REMOTE_USER__|$(id -un)|g" \
+      "$REPO_DIR/systemd/acme-renew.service.template" > "$acme_tmp"
+    log "Instalando acme-renew.service + .timer"
+    sudo cp "$acme_tmp" /etc/systemd/system/acme-renew.service
+    rm -f "$acme_tmp"
+    sudo cp "$REPO_DIR/systemd/acme-renew.timer" /etc/systemd/system/acme-renew.timer
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now acme-renew.timer
+  fi
 fi
 
 log "Verificando respuestas"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Renueva el certificado publico *.cortexdev.win (acme.sh)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__REMOTE_DIR__
+ExecStart=__REMOTE_DIR__/scripts/acme-renew.sh
+User=root
+Group=root
+TimeoutStartSec=0

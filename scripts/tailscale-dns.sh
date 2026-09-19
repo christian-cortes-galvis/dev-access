@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 #
-# Verifica que los dominios *.cortexdev.lan funcionen desde la VPN Tailscale.
+# Verifica que los dominios *.cortexdev.lan y *.cortexdev.win funcionen desde la VPN.
 # Se ejecuta EN ubuntu-services: scripts/tailscale-dns.sh
 #
 # No modifica nada. Comprueba:
 #   1. tailscale activo y con la subred 192.168.0.0/24 anunciada/aprobada
-#   2. split DNS (restricted nameserver): cortexdev.lan -> 192.168.0.49
+#   2. split DNS (restricted nameserver): cortexdev.lan y cortexdev.win -> 192.168.0.49
 #   3. Pi-hole con dns.listeningMode = ALL (responde consultas del tailnet)
 #   4. resolucion de index/app-admin via MagicDNS (100.100.100.100)
 #
 # Variables:
 #   ACCESS_IP   IP de la capa de acceso (default 192.168.0.49)
 #   APPS_IP     IP de las apps (default 192.168.0.87)
-#   DNS_DOMAIN  dominio del tailnet a comprobar (default cortexdev.lan)
+#   DNS_DOMAINS dominios del tailnet a comprobar (default "cortexdev.lan cortexdev.win")
 #
 set -uo pipefail
 
 ACCESS_IP="${ACCESS_IP:-192.168.0.49}"
 APPS_IP="${APPS_IP:-192.168.0.87}"
-DNS_DOMAIN="${DNS_DOMAIN:-cortexdev.lan}"
+DNS_DOMAINS="${DNS_DOMAINS:-cortexdev.lan cortexdev.win}"
 MAGICDNS_IP="100.100.100.100"
 
 FAIL=0
@@ -52,23 +52,25 @@ else
   printf '       Aprueba la ruta en https://console.tailscale.com/admin/machines\n'
 fi
 
-info "2/4 Split DNS de Tailscale (${DNS_DOMAIN})"
+info "2/4 Split DNS de Tailscale (${DNS_DOMAINS})"
 dns_status="$(tailscale dns status 2>/dev/null || true)"
 if [ -z "$dns_status" ]; then
   warn "no pude leer 'tailscale dns status'"
 else
-  split_line="$(printf '%s\n' "$dns_status" | grep -E "^[[:space:]]*-[[:space:]]*${DNS_DOMAIN}\.?" | head -n 1 || true)"
-  if [ -z "$split_line" ]; then
-    bad "no hay restricted nameserver (split DNS) para ${DNS_DOMAIN}"
-    printf '       Consola: https://console.tailscale.com/admin/dns\n'
-    printf '       Add nameserver -> Custom -> %s, restrict to domain %s\n' "$ACCESS_IP" "$DNS_DOMAIN"
-    printf '       No actives "Override DNS servers".\n'
-  elif printf '%s' "$split_line" | grep -q "$ACCESS_IP"; then
-    ok "split DNS ${DNS_DOMAIN} -> $ACCESS_IP"
-  else
-    bad "el split DNS de ${DNS_DOMAIN} no apunta a $ACCESS_IP"
-    printf '       linea actual: %s\n' "$split_line"
-  fi
+  for domain in $DNS_DOMAINS; do
+    split_line="$(printf '%s\n' "$dns_status" | grep -E "^[[:space:]]*-[[:space:]]*${domain}\.?" | head -n 1 || true)"
+    if [ -z "$split_line" ]; then
+      bad "no hay restricted nameserver (split DNS) para ${domain}"
+      printf '       Consola: https://console.tailscale.com/admin/dns\n'
+      printf '       Add nameserver -> Custom -> %s, restrict to domain %s\n' "$ACCESS_IP" "$domain"
+      printf '       No actives "Override DNS servers".\n'
+    elif printf '%s' "$split_line" | grep -q "$ACCESS_IP"; then
+      ok "split DNS ${domain} -> $ACCESS_IP"
+    else
+      bad "el split DNS de ${domain} no apunta a $ACCESS_IP"
+      printf '       linea actual: %s\n' "$split_line"
+    fi
+  done
 fi
 
 info "3/4 Pi-hole (escucha de consultas del tailnet)"
@@ -101,16 +103,18 @@ dig_answer() {
 if ! command -v dig >/dev/null; then
   warn "dig no instalado; no verifico la resolucion"
 else
-  for pair in "index.${DNS_DOMAIN}:${ACCESS_IP}" "app-admin.${DNS_DOMAIN}:${APPS_IP}"; do
-    name="${pair%%:*}"
-    want="${pair##*:}"
-    r="$(dig_answer "$name")"
-    if [ "$r" = "$want" ]; then
-      ok "$name -> $want"
-    else
-      bad "$name -> ${r:-sin respuesta} (esperado $want)"
-      printf '       Si falla solo aqui, revisa el split DNS y misc.dnsmasq_lines (scripts/dns-overrides.sh)\n'
-    fi
+  for domain in $DNS_DOMAINS; do
+    for pair in "index.${domain}:${ACCESS_IP}" "app-admin.${domain}:${APPS_IP}"; do
+      name="${pair%%:*}"
+      want="${pair##*:}"
+      r="$(dig_answer "$name")"
+      if [ "$r" = "$want" ]; then
+        ok "$name -> $want"
+      else
+        bad "$name -> ${r:-sin respuesta} (esperado $want)"
+        printf '       Si falla solo aqui, revisa el split DNS y misc.dnsmasq_lines (scripts/dns-overrides.sh)\n'
+      fi
+    done
   done
 fi
 
@@ -118,6 +122,6 @@ echo
 if [ "$FAIL" = "0" ]; then
   printf '\033[1;32mAcceso remoto Tailscale OK\033[0m\n'
 else
-  printf '\033[1;31mHay fallos: los .cortexdev.lan no funcionaran bien por Tailscale\033[0m\n'
+  printf '\033[1;31mHay fallos: los dominios internos no funcionaran bien por Tailscale\033[0m\n'
   exit 1
 fi
