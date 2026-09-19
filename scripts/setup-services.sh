@@ -28,20 +28,13 @@ if [ "${ALLOW_OTHER_HOST:-0}" != "1" ] && ! hostname -I 2>/dev/null | grep -q '1
 fi
 
 info "1/5 Archivos y certificados"
-for p in docker-compose.yml nginx/conf.d/index.conf nginx/conf.d/ca.conf nginx/conf.d/infra.conf nginx/conf.d/snippets/tls-win.conf portal/index.html; do
+for p in docker-compose.yml nginx/conf.d/index.conf nginx/conf.d/infra.conf nginx/conf.d/snippets/tls-win.conf portal/index.html; do
   if [ -e "$p" ]; then
     ok "$p"
   else
     bad "falta $p (repo incompleto en esta maquina)"
   fi
 done
-
-if [ -f certs/cortexdev.lan/cortexdev.lan.pem ] && [ -f certs/cortexdev.lan/cortexdev.lan-key.pem ] && [ -f certs/cortexdev.lan/ca.pem ]; then
-  ok "certs .lan presentes"
-else
-  bad "faltan certificados .lan; ejecutando scripts/install-certs.sh"
-  scripts/install-certs.sh || bad "install-certs.sh fallo"
-fi
 
 # nginx referencia el par .win; asegura un provisional autofirmado si aun no
 # se emitio el de Let's Encrypt (scripts/install-win-cert.sh --issue).
@@ -157,11 +150,11 @@ if [ -n "$PIHOLE_KIND" ] && [ -x scripts/dns-overrides.sh ]; then
   scripts/dns-overrides.sh || true
 elif [ -n "$PIHOLE_KIND" ]; then
   bad "falta scripts/dns-overrides.sh; agrega a mano en misc.dnsmasq_lines:"
-  for h in index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
-    printf '         address=/%s.cortexdev.lan/192.168.0.49\n' "$h"
+  for h in index pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
     printf '         address=/%s.cortexdev.win/192.168.0.49\n' "$h"
   done
-  printf '       Conserva los wildcards: address=/cortexdev.lan/192.168.0.87 y address=/cortexdev.win/192.168.0.87\n'
+  printf '       Conserva el wildcard: address=/cortexdev.win/192.168.0.87\n'
+  printf '       Purga cualquier linea .lan de misc.dnsmasq_lines.\n'
 fi
 
 if [ -x scripts/check.sh ]; then

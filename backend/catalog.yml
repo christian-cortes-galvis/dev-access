@@ -359,14 +359,3 @@ services:
     badge: false
     note: "Administración de MySQL"
     sort: 430
-
-  - slug: ca
-    name: CA local (mkcert)
-    category: spas
-    url: https://ca.cortexdev.win/
-    probe_url: https://ca.cortexdev.win/cortexdev-lan-ca.crt
-    accept: [200]
-    tech: [certificate]
-    badge: false
-    note: "Descarga <code>cortexdev-lan-ca.crt</code> (solo para los hosts .lan de respaldo)"
-    sort: 440

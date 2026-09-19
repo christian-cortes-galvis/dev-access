@@ -1,35 +1,36 @@
 # cortexdev-access
 
-Capa de acceso de la infraestructura `*.cortexdev.lan`: portal/índice, CA local y dashboards
-de infraestructura. Vive en **ubuntu-services** (192.168.0.49), que está siempre encendida, para
-que reiniciar `ubuntu-docker` (192.168.0.87, donde corren las apps) no deje sin portal ni DNS.
+Capa de acceso de la infraestructura `*.cortexdev.win`: portal/índice y dashboards de
+infraestructura (Pi-hole, Proxmox, PBS, Uptime/Kuma, Netdata). Vive en **ubuntu-services**
+(192.168.0.49), que está siempre encendida, para que reiniciar `ubuntu-docker` (192.168.0.87,
+donde corren las apps) no deje sin portal ni DNS.
+
+> `*.cortexdev.lan` fue **retirado** (Fase 3): ni la capa de acceso ni el DNS lo sirven ya.
 
 ## Contenido
 
 ```
 docker-compose.yml                 # nginx:stable + portal-api, network_mode host
 nginx/conf.d/
-  index.conf                       # index.cortexdev.{lan,win}  → portal/ + /api/
-  ca.conf                          # ca.cortexdev.{lan,win}     → ca.pem
+  index.conf                       # index.cortexdev.win  → portal/ + /api/
   infra.conf                       # pihole, proxmox, backups/pbs, uptime/kuma, netdata-*
-  snippets/                        # cuerpos compartidos y pares TLS por dominio
+  snippets/                        # cuerpos compartidos y par TLS (tls-win.conf)
 portal/                            # portal (shells HTML + render.js, favicons, iconos)
 backend/                           # portal-api: FastAPI + SQLite (catalogo y estado)
 backend/catalog.yml                # catalogo de servicios (fuente de verdad, se edita aqui)
-certs/                             # gitignored; wildcard *.cortexdev.lan (+CA) y *.cortexdev.win
+certs/                             # gitignored; wildcard *.cortexdev.win
 systemd/access-ingress.service.template
 systemd/acme-renew.service.template
 systemd/acme-renew.timer
-scripts/install-certs.sh
 scripts/install-win-cert.sh        # cert *.cortexdev.win: provisional / emision Let's Encrypt
 scripts/add-app-win-vhost.sh       # en ubuntu-docker: añade un vhost proxy *.cortexdev.win
 scripts/apps-verify-win.sh         # en ubuntu-docker: verifica los vhosts .win de nginx_web
-scripts/apps-audit-lan.sh          # en ubuntu-docker: audita APP_URL/cookies .lan en las apps
+scripts/apps-audit-lan.sh          # en ubuntu-docker: audita restos de dominio antiguo en apps
 scripts/apps-fix-acme-reload.sh    # en ubuntu-docker: asegura reload de nginx_web al renovar
 scripts/diagnose-host.sh           # diagnostica puertos/servicios de un host interno
 scripts/acme-renew.sh              # renovacion periodica (acme.sh --cron) para systemd
 scripts/dns-overrides.sh           # overrides DNS de la capa de acceso en Pi-hole (idempotente)
-scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole (acceso remoto .lan/.win)
+scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole
 scripts/deploy.sh
 scripts/check.sh
 scripts/setup-services.sh
@@ -43,11 +44,11 @@ INSTALACION-cortexdev-win.md       # runbook paso a paso: Cloudflare, emision, D
   - **nativo (v6)**: `sudo pihole-FTL --config webserver.port '8080o,8443s'` y `sudo systemctl restart pihole-FTL`.
   - **Docker**: publicar `8080:80` y `8443:443` en su compose y recrear con `docker compose up -d`
     (no `restart`), con `restart: unless-stopped`.
-  `infra.conf` proxifica `pihole.cortexdev.lan` a `127.0.0.1:8443`.
+  `infra.conf` proxifica `pihole.cortexdev.win` a `127.0.0.1:8443`.
 - Para acceso remoto por Tailscale, Pi-hole debe aceptar consultas del tailnet:
   `sudo pihole-FTL --config dns.listeningMode ALL` y `sudo systemctl restart pihole-FTL`
   (ver "Acceso remoto con Tailscale").
-- Los certificados (no están en git).
+- El certificado `*.cortexdev.win` (no está en git).
 
 ## Puesta en marcha
 
@@ -56,23 +57,16 @@ INSTALACION-cortexdev-win.md       # runbook paso a paso: Cloudflare, emision, D
 git clone <REMOTE_URL> ~/cortexdev-access
 cd ~/cortexdev-access
 
-# 2. Instalar certificados (scp desde ubuntu-docker, una vez)
-scripts/install-certs.sh
-#    o: scripts/install-certs.sh usuario@otro-host:/ruta/certs
-```
-
-`install-certs.sh` se ejecuta **sin `sudo`**: así usa tus claves y tu `known_hosts`. Acepta el
-host nuevo automáticamente (`StrictHostKeyChecking=accept-new`). Si `ubuntu-services` aún no tiene
-acceso SSH a `ubuntu-docker`, autoriza su clave primero (o usa un origen local
-`scripts/install-certs.sh /ruta/local`).
-
-```bash
-# 3. Levantar nginx de acceso (requiere 80/443 libres)
+# 2. Levantar nginx de acceso (requiere 80/443 libres).
+#    Si aun no hay cert real, se genera un provisional autofirmado para arrancar.
 docker compose up -d
 
-# 4. Autostart (opcional, recomendado)
+# 3. Autostart (opcional, recomendado)
 INSTALL_SYSTEMD=1 scripts/deploy.sh
 ```
+
+El certificado real se emite con `scripts/install-win-cert.sh --issue` (ver
+"Dominio interno con certificado público").
 
 ## Actualizar
 
@@ -88,26 +82,19 @@ En `ubuntu-services`:
 scripts/check.sh
 ```
 
-Comprueba certificados, que `access_nginx` esté corriendo, respuestas `200` de `index`/`ca` por HTTP
-local (con `Host`, sin depender del DNS), los overrides DNS en Pi-hole y los puertos 80/443.
-Equivalente manual:
+Comprueba el certificado, que `access_nginx` esté corriendo, respuestas HTTP de acceso y apps
+(sin `-k`), los overrides DNS `.win` en Pi-hole y los puertos 80/443. Equivalente manual:
 
 ```bash
-curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: index.cortexdev.lan' https://127.0.0.1/  # 200
-curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: ca.cortexdev.lan' https://127.0.0.1/cortexdev-lan-ca.crt  # 200
-dig +short index.cortexdev.lan @127.0.0.1      # 192.168.0.49
-dig +short app-admin.cortexdev.lan @127.0.0.1  # 192.168.0.87
-
-# Dominio publico (cert real: sin -k)
-curl -sSI https://index.cortexdev.win/                          # 200
-curl -sSI https://ca.cortexdev.win/cortexdev-lan-ca.crt         # 200
-dig +short index.cortexdev.win @127.0.0.1                       # 192.168.0.49
-openssl s_client -connect 192.168.0.49:443 -servername index.cortexdev.win  # issuer Let's Encrypt, SAN *.cortexdev.win
+curl -sSI https://index.cortexdev.win/            # 200 sin -k
+dig +short index.cortexdev.win @127.0.0.1         # 192.168.0.49
+dig +short app-admin.cortexdev.win @127.0.0.1     # 192.168.0.87
+openssl s_client -connect 192.168.0.49:443 -servername index.cortexdev.win  # issuer Let's Encrypt
+dig +short index.cortexdev.lan @127.0.0.1         # vacio (retirado)
 # No debe existir DNS publico del dominio:
-dig +short index.cortexdev.win @1.1.1.1                         # vacio
+dig +short index.cortexdev.win @1.1.1.1           # vacio
 ```
 
-Desde cualquier equipo de la LAN: `https://index.cortexdev.lan` (sin `-k` si ya confía en la CA).
 Si `index` devuelve `403`, Pi-hole sigue ocupando el 443: remapea su UI a `8080/8443`.
 
 ### Puesta en marcha todo-en-uno
@@ -118,57 +105,46 @@ Si prefieres un solo paso (idempotente), en `ubuntu-services`:
 scripts/setup-services.sh
 ```
 
-Instala certs si faltan, detecta Pi-hole y libera 80/443 (modo host o bridge), levanta el compose,
-aplica los overrides DNS con `scripts/dns-overrides.sh` y valida con `scripts/check.sh`.
+Detecta Pi-hole y libera 80/443, asegura el cert `.win`, levanta el compose, aplica los overrides
+DNS con `scripts/dns-overrides.sh` y valida con `scripts/check.sh`.
 
 ## DNS en Pi-hole (192.168.0.49)
 
 En `misc.dnsmasq_lines` el wildcard manda las apps a ubuntu-docker; estos overrides mandan la
 capa de acceso a ubuntu-services (dnsmasq usa la coincidencia más específica).
 `scripts/dns-overrides.sh` los aplica automáticamente (backup de `pihole.toml`, escritura vía
-`pihole-FTL --config`, `reloaddns` y verificación con `dig`; idempotente):
+`pihole-FTL --config`, `reloaddns` y verificación con `dig`; idempotente). Además **purga**
+cualquier línea `.lan`:
 
 ```
-address=/index.cortexdev.lan/192.168.0.49
-address=/ca.cortexdev.lan/192.168.0.49
-address=/pihole.cortexdev.lan/192.168.0.49
-address=/proxmox.cortexdev.lan/192.168.0.49
-address=/backups.cortexdev.lan/192.168.0.49
-address=/pbs.cortexdev.lan/192.168.0.49
-address=/uptime.cortexdev.lan/192.168.0.49
-address=/kuma.cortexdev.lan/192.168.0.49
-address=/netdata-services.cortexdev.lan/192.168.0.49
-address=/netdata-backups.cortexdev.lan/192.168.0.49
-address=/netdata-proxmox.cortexdev.lan/192.168.0.49
-address=/netdata-docker.cortexdev.lan/192.168.0.49
-```
-
-Y mantener los wildcards a las apps:
-
-```
-address=/cortexdev.lan/192.168.0.87
 address=/cortexdev.win/192.168.0.87
+address=/index.cortexdev.win/192.168.0.49
+address=/pihole.cortexdev.win/192.168.0.49
+address=/proxmox.cortexdev.win/192.168.0.49
+address=/backups.cortexdev.win/192.168.0.49
+address=/pbs.cortexdev.win/192.168.0.49
+address=/uptime.cortexdev.win/192.168.0.49
+address=/kuma.cortexdev.win/192.168.0.49
+address=/netdata-services.cortexdev.win/192.168.0.49
+address=/netdata-backups.cortexdev.win/192.168.0.49
+address=/netdata-proxmox.cortexdev.win/192.168.0.49
+address=/netdata-docker.cortexdev.win/192.168.0.49
 ```
 
-`scripts/dns-overrides.sh` escribe lo mismo para los hosts `.cortexdev.win` (el wildcard va a las
-apps y cada host de la capa de acceso a `192.168.0.49`); dnsmasq usa la coincidencia más
-específica. Ver "Dominio interno con certificado público".
+## Acceso remoto con Tailscale
 
-## Acceso remoto con Tailscale (los `.lan` siguen funcionando)
-
-Los equipos en la VPN Tailscale usan MagicDNS (`100.100.100.100`). Para que los enlaces guardados
-`https://<host>.cortexdev.lan` resuelvan fuera de la LAN, el tailnet necesita un **split DNS**
-(restricted nameserver) hacia Pi-hole. La subred `192.168.0.0/24` ya la anuncia `ubuntu-services`,
-así que solo falta el DNS.
+Los equipos en la VPN Tailscale usan MagicDNS (`100.100.100.100`). Para que
+`https://<host>.cortexdev.win` resuelva fuera de la LAN, el tailnet necesita un **split DNS**
+(restricted nameserver) hacia Pi-hole. La subred `192.168.0.0/24` ya la anuncia
+`ubuntu-services`, así que solo falta el DNS.
 
 ### 1. Split DNS en Tailscale (una vez, en la consola)
 
 En <https://console.tailscale.com/admin/dns>:
 
-- **Add nameserver** → **Custom** → `192.168.0.49`, restringido al dominio `cortexdev.lan`.
-  Repetir para `cortexdev.win` (ver "Dominio interno con certificado público").
+- **Add nameserver** → **Custom** → `192.168.0.49`, restringido al dominio `cortexdev.win`.
 - **No** actives "Override DNS servers" (solo ese dominio va a Pi-hole).
-- Opcional: añade `cortexdev.lan` a **Search domains** para escribir `index` a secas.
+- Opcional: añade `cortexdev.win` a **Search domains** para escribir `index` a secas.
 - Si algún equipo usa **exit node**: activa "Use with exit node" en ese nameserver.
 
 En cada cliente: "Use Tailscale DNS settings" activado (por defecto) y rutas de subred aceptadas
@@ -187,46 +163,34 @@ sudo systemctl restart pihole-FTL
 `ufw` está deshabilitado (`ENABLED=no`) y no bloquea. Si se habilita, permite 53 desde
 `192.168.0.0/24` y `100.64.0.0/10`.
 
-### 3. Confianza de la CA local en los clientes
-
-`https://` usa el wildcard mkcert; instala `certs/cortexdev.lan/ca.pem` una vez por equipo:
-
-- Linux: copiar a `/usr/local/share/ca-certificates/cortexdev-lan-ca.crt` y `sudo update-ca-certificates`.
-- Windows: `certutil -addstore -f Root ca.pem` (admin).
-- macOS: `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.pem`.
-- Android/iOS: instalar la CA como certificado de usuario y habilitar su confianza.
-
-El archivo se descarga en `http://ca.cortexdev.lan/` (HTTP) o desde el repo.
-
-### 4. Validar
+### 3. Validar
 
 En `ubuntu-services`: `scripts/tailscale-dns.sh` (también se ejecuta dentro de `scripts/check.sh`).
 
 Desde un cliente remoto conectado solo por Tailscale:
 
 ```bash
-dig +short index.cortexdev.lan @100.100.100.100   # 192.168.0.49
-dig +short app-admin.cortexdev.lan @100.100.100.100  # 192.168.0.87 (wildcard apps)
-curl -vI https://index.cortexdev.lan              # 200
+dig +short index.cortexdev.win @100.100.100.100       # 192.168.0.49
+dig +short app-admin.cortexdev.win @100.100.100.100   # 192.168.0.87 (wildcard apps)
+curl -vI https://index.cortexdev.win                  # 200
 ```
 
-Windows: `Resolve-DnsName index.cortexdev.lan` (no `nslookup`, no respeta el split DNS).
+Windows: `Resolve-DnsName index.cortexdev.win` (no `nslookup`, no respeta el split DNS).
 
 ## Dominio interno con certificado público (`*.cortexdev.win`)
 
-Los dashboards se sirven también como `*.cortexdev.win` con un certificado comodín de
-**Let's Encrypt**, de modo que **no aparece el aviso de certificado** aunque el equipo no tenga
-instalada la CA de mkcert. El dominio sigue siendo interno: no se publica ningún A/AAAA ni se
-abren puertos, y el DNS lo resuelve Pi-hole dentro de la LAN o el split DNS de Tailscale.
+Todo se sirve como `*.cortexdev.win` con un certificado comodín de **Let's Encrypt**, de modo que
+**no aparece el aviso de certificado** aunque el equipo no tenga instalada ninguna CA. El dominio
+sigue siendo interno: no se publica ningún A/AAAA ni se abren puertos, y el DNS lo resuelve
+Pi-hole dentro de la LAN o el split DNS de Tailscale.
 
 > Runbook completo con todos los comandos (Cloudflare, emisión, renovación, DNS y Tailscale):
 > [`INSTALACION-cortexdev-win.md`](INSTALACION-cortexdev-win.md).
 
-- `cortexdev.lan` **sigue vigente** (enlaces guardados y equipos con la CA mkcert instalada).
 - Emisión por **DNS-01 con Cloudflare** (obligatorio: es comodín y no se exponen 80/443).
 - La zona de Cloudflare no debe tener registros A/AAAA de servicio: solo NS/SOA y el TXT
-  temporal `_acme-challenge` que acme.sh crea y borra. Si existe un wildcard público (p. ej.
-  `*.cortexdev.win A 192.168.0.87`) hay que eliminarlo en el panel de Cloudflare.
+  temporal `_acme-challenge` que acme.sh crea y borra.
+- `.lan` y la CA mkcert fueron retirados; no hace falta instalar nada en los equipos.
 
 ### Emisión y credencial (una vez)
 
@@ -266,41 +230,29 @@ INSTALL_SYSTEMD=1 scripts/deploy.sh      # instala access-ingress + acme-renew.t
 systemctl list-timers | grep acme
 ```
 
-### nginx: un `server` por dominio
+### nginx
 
-nginx **no** selecciona por SNI entre dos `ssl_certificate` del mismo tipo dentro de un mismo
-bloque (el último RSA pisa al anterior). Por eso cada servicio tiene dos bloques `listen 443 ssl`:
-uno con el cert mkcert (`.lan`) y otro con el de Let's Encrypt (`.win`). El cuerpo de cada
-servicio se comparte en `nginx/conf.d/snippets/` y los pares TLS en `snippets/tls-{lan,win}.conf`.
+Un `server` block por host con `include snippets/tls-win.conf` y un `*-body.conf` con las
+directivas compartidas. nginx no elige entre dos certs del mismo tipo en un bloque, por eso no se
+mezclan varios dominios en el mismo `server`.
 
-### DNS
+### Apps de `ubuntu-docker`
 
-Pi-hole (`scripts/dns-overrides.sh`) publica el wildcard de apps y los overrides de la capa de
-acceso para ambos dominios (`address=/cortexdev.win/192.168.0.87` y
-`address=/<host>.cortexdev.win/192.168.0.49`). En Tailscale (<https://console.tailscale.com/admin/dns>)
-hay que añadir un segundo **restricted nameserver** `192.168.0.49 → cortexdev.win` (además de
-`cortexdev.lan`); si algún equipo usa exit node, activar "Use with exit node".
-
-### Apps de `ubuntu-docker` (Fase 2)
-
-Las apps ya se sirven como `*.cortexdev.win`: `nginx_web` (192.168.0.87) tiene un `server` block
-`.win` por app y usa un comodín Let's Encrypt en `certs/cortexdev.win/` de ese host, **emitido y
-renovado allí** con `~/.acme.sh` (crontab 0/6/12/18). Es independiente de la capa de acceso.
+Las apps se sirven también como `*.cortexdev.win`: `nginx_web` (192.168.0.87) tiene un `server`
+block `.win` por app y usa un comodín Let's Encrypt en `certs/cortexdev.win/` de ese host,
+**emitido y renovado allí** con `~/.acme.sh` (crontab 0/6/12/18). Es independiente de la capa de
+acceso.
 
 - Pi-hole resuelve el wildcard `address=/cortexdev.win/192.168.0.87` (apps) y los overrides de la
   capa de acceso a `192.168.0.49`; Tailscale tiene el split DNS `cortexdev.win`.
-- `backend/catalog.yml` y los enlaces del portal usan `.win`. `backend/app/probe.py` combina las
-  CAs del sistema (valida Let's Encrypt) con la CA mkcert, para que convivan `.win` y `.lan`.
 - Para añadir un vhost `.win` nuevo (proxy), en `ubuntu-docker`:
   `scripts/add-app-win-vhost.sh <host>.cortexdev.win <proxy_pass>` (atajo sin args:
   pma → `http://phpmyadmin:80`). Escribe el vhost con el cert `.win`, valida, recarga y verifica.
-- `.lan` sigue como respaldo en las apps (catch-all `cortexdev-lan.conf`). Si una app fija
-  `APP_URL`/cookies a `.lan`, el login puede quedar mixto hasta ajustarlo en la app.
 
 ## Portal dinámico (catálogo + estado)
 
-El portal ya no lleva las listas hardcodeadas: `portal-api` (contenedor `portal_api`, FastAPI +
-SQLite) guarda el catálogo de servicios y comprueba su estado.
+El portal no lleva listas hardcodeadas: `portal-api` (contenedor `portal_api`, FastAPI + SQLite)
+guarda el catálogo de servicios y comprueba su estado.
 
 - Catálogo: `backend/catalog.yml` es la fuente de verdad. Al arrancar (y en cada
   `scripts/deploy.sh`) se sincroniza por `slug` con `/data/portal.db`; los servicios que se
@@ -320,14 +272,13 @@ SQLite) guarda el catálogo de servicios y comprueba su estado.
 - Añadir/editar servicios: editar `backend/catalog.yml` y ejecutar `scripts/deploy.sh`
   (idempotente). No hay que tocar los HTML.
 
-Variables de `portal_api` (compose): `DB_PATH`, `CATALOG_PATH`, `CA_PATH` (CA local para
-verificar TLS), `POLL_INTERVAL`, `PROBE_TIMEOUT`, `RETENTION_DAYS`.
+Variables de `portal_api` (compose): `DB_PATH`, `CATALOG_PATH`, `POLL_INTERVAL`, `PROBE_TIMEOUT`,
+`RETENTION_DAYS`. La verificación TLS usa las CAs del sistema (Let's Encrypt).
 
 ## Seguridad
 
 - `certs/` está en `.gitignore`: **nunca** subir `.pem`/llaves privadas, ni siquiera en un repo
-  privado. Si la llave se filtra, regenerar el wildcard con `mkcert` y volver a instalar la CA
-  en los equipos.
+  privado.
 - La llave del comodín público `certs/cortexdev.win/key.pem` (permisos `600`) permite suplantar
   cualquier host de un nivel bajo `cortexdev.win`. No versionarla y, si se filtra, revocar y
   reemitir con `scripts/install-win-cert.sh --issue`.

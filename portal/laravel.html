@@ -31,7 +31,7 @@
     </nav>
   </header>
 
-  <div class="section-title"><span data-count="laravel">&mdash;</span> proyectos &middot; vhosts <code>*.cortexdev.win</code> (respaldo catch-all <code>.lan</code>)</div>
+  <div class="section-title"><span data-count="laravel">&mdash;</span> proyectos &middot; vhosts <code>*.cortexdev.win</code></div>
 
   <table class="links" data-category="laravel">
     <thead>
@@ -48,9 +48,8 @@
 
   <div class="notice">
     Cada app tiene su vhost <code>.win</code> en <code>nginx_web</code> (.87), con certificado
-    público; <code>cortexdev-lan.conf</code> queda como catch-all de respaldo
-    (<code>root /var/www/html/&lt;app&gt;/public</code>). Si una app fija su <code>APP_URL</code>
-    o cookies a <code>.lan</code>, el login puede quedar mixto hasta ajustarlo en la app.
+    público. Si una app fija su <code>APP_URL</code> o cookies a un dominio antiguo, el login
+    puede quedar mixto hasta ajustarlo en la app.
   </div>
 
   <footer class="bottom">

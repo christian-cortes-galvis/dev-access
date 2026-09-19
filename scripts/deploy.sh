@@ -83,13 +83,10 @@ fi
 log "Verificando respuestas"
 verify_fail=0
 for path in "/" "/infraestructura.html" "/laravel.html"; do
-  code="$(curl -sk -o /dev/null -w '%{http_code}' -H 'Host: index.cortexdev.lan' "https://127.0.0.1:$ACCESS_PORT$path" || true)"
-  printf '  index.cortexdev.lan%-22s -> %s\n' "$path" "$code"
+  code="$(curl -sk -o /dev/null -w '%{http_code}' -H 'Host: index.cortexdev.win' "https://127.0.0.1:$ACCESS_PORT$path" || true)"
+  printf '  index.cortexdev.win%-22s -> %s\n' "$path" "$code"
   [ "$code" = "200" ] || verify_fail=1
 done
-code="$(curl -sk -o /dev/null -w '%{http_code}' -H 'Host: ca.cortexdev.lan' "https://127.0.0.1:$ACCESS_PORT/cortexdev-lan-ca.crt" || true)"
-printf '  ca.cortexdev.lan/cortexdev-lan-ca.crt -> %s\n' "$code"
-[ "$code" = "200" ] || verify_fail=1
 
 if [ "$verify_fail" != "0" ]; then
   log "Diagnostico:"

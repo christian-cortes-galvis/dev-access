@@ -4,12 +4,10 @@ Todos los comandos de este runbook se ejecutan **EN `ubuntu-services` (192.168.0
 donde se indique el panel web.
 
 - Capa de acceso (este repo): `ubuntu-services` = `192.168.0.49`.
-- Apps: `ubuntu-docker` = `192.168.0.87` (Fase 2).
+- Apps: `ubuntu-docker` = `192.168.0.87`.
 - `access_nginx` corre con `network_mode: host` y bindea 80/443.
-- Certificados (gitignored):
-  - mkcert: `certs/cortexdev.lan/{cortexdev.lan.pem,cortexdev.lan-key.pem,ca.pem}`
-  - Let's Encrypt: `certs/cortexdev.win/{fullchain.pem,key.pem}`
-- Dominios internos: `cortexdev.lan` (sigue vigente) y `cortexdev.win` (cert público).
+- Certificado (gitignored): Let's Encrypt `certs/cortexdev.win/{fullchain.pem,key.pem}`.
+- Dominio interno: `cortexdev.win` (cert público). `.lan` fue retirado en la Fase 3.
 - Emisión: **DNS-01 con Cloudflare** (comodín; no se exponen 80/443).
 
 > Importante: el repo ya tiene el código listo (nginx, scripts, systemd, README). Este runbook
@@ -178,14 +176,13 @@ Verificación de SNI y respuestas (sin `-k`):
 ```bash
 docker exec access_nginx nginx -t
 
-for sn in index.cortexdev.lan index.cortexdev.win ca.cortexdev.win pihole.cortexdev.win; do
+for sn in index.cortexdev.win pihole.cortexdev.win netdata-services.cortexdev.win; do
   printf '%-28s ' "$sn"
   echo | openssl s_client -connect 127.0.0.1:443 -servername "$sn" 2>/dev/null \
     | openssl x509 -noout -issuer
 done
 
 curl -sSI https://index.cortexdev.win/
-curl -sSI https://ca.cortexdev.win/cortexdev-lan-ca.crt
 curl -sSI https://pihole.cortexdev.win/admin/
 ```
 
@@ -194,12 +191,12 @@ curl -sSI https://pihole.cortexdev.win/admin/
 ## 5. Pi-hole: overrides DNS de `.win`
 
 `scripts/dns-overrides.sh` escribe en `misc.dnsmasq_lines` el wildcard de apps y los overrides de
-la capa de acceso para ambos dominios (idempotente, con backup de `pihole.toml`):
+la capa de acceso (idempotente, con backup de `pihole.toml`). Además **purga** cualquier línea
+`.lan` que hubiera quedado:
 
 ```
 address=/cortexdev.win/192.168.0.87
 address=/index.cortexdev.win/192.168.0.49
-address=/ca.cortexdev.win/192.168.0.49
 ... (resto de HOSTS)
 ```
 
@@ -220,8 +217,7 @@ dig +short app-admin.cortexdev.win @127.0.0.1  # 192.168.0.87 (wildcard apps)
 
 En <https://console.tailscale.com/admin/dns>:
 
-1. **Add nameserver → Custom → `192.168.0.49`**, restringido al dominio `cortexdev.win`
-   (además del que ya existe para `cortexdev.lan`).
+1. **Add nameserver → Custom → `192.168.0.49`**, restringido al dominio `cortexdev.win`.
 2. **No** actives "Override DNS servers".
 3. Si algún equipo usa **exit node**, activa **"Use with exit node"** en ese nameserver.
 4. Opcional: añade `cortexdev.win` a **Search domains**.
@@ -256,18 +252,18 @@ El `--reloadcmd` guardado por acme.sh recarga `access_nginx` al renovar.
 
 ```bash
 scripts/check.sh              # debe terminar en "Todo OK"
-scripts/tailscale-dns.sh      # split DNS y MagicDNS de ambos dominios
+scripts/tailscale-dns.sh      # split DNS y MagicDNS de .win
 
 # Manual
 dig +short index.cortexdev.win @127.0.0.1          # 192.168.0.49
 curl -sSI https://index.cortexdev.win/             # 200 sin -k
-curl -sSI https://ca.cortexdev.win/cortexdev-lan-ca.crt   # 200
 openssl s_client -connect 192.168.0.49:443 -servername index.cortexdev.win  # issuer LE, SAN *.cortexdev.win
 dig +short index.cortexdev.win @1.1.1.1            # vacio (NXDOMAIN)
 dig +short cortexdev.win A @1.1.1.1                # vacio
+dig +short index.cortexdev.lan @127.0.0.1          # vacio (.lan retirado)
 ```
 
-Desde un Android/iOS **sin** la CA de mkcert instalada: abrir `https://index.cortexdev.win`
+Desde un Android/iOS **sin nada instalado**: abrir `https://index.cortexdev.win`
 en la LAN y por Tailscale; no debe aparecer aviso de certificado.
 
 ---
@@ -284,13 +280,12 @@ en la LAN y por Tailscale; no debe aparecer aviso de certificado.
 | `Domain key exists, do you want to overwrite it?` al emitir | Clave dejada por el ensayo en staging. `scripts/install-win-cert.sh --issue` ya usa `--force`; si lo corres a mano, añade `--force`. |
 | Emisión falla con error de Cloudflare | Token sin `Zone:DNS:Edit` sobre `cortexdev.win`, o `CF_Account_ID` necesario en `/etc/cortexdev/acme.env`. |
 | `acme.sh --cron` no recarga nginx | `access_nginx` no está corriendo; el cert se instala igual y se recargará en el próximo arranque/deploy. |
-| Aviso de certificado en las apps | Fase 2 (nginx de `ubuntu-docker`) aún en `.lan`; fuera de alcance. |
+| Aviso de certificado en las apps | Comodín LE de `.87` no instalado o nginx sin recargar: `scripts/apps-fix-acme-reload.sh` en ubuntu-docker. |
 
 ### Rollback
 
-- nginx: revertir a los `server_name`/certs `.lan` (`git checkout` de `nginx/conf.d` + reload).
-- DNS: `scripts/dns-overrides.sh` conserva un backup `pihole.toml.bak-<timestamp>` en
-  `/etc/pihole/` para restaurar.
+- Fase 3: `git revert` del commit y `docker compose up -d --build`. El DNS `.lan` se recupera
+  restaurando el backup `pihole.toml.bak-<timestamp>` de `/etc/pihole/` y reiniciando `pihole-FTL`.
 - Cert `.win`: borrar `certs/cortexdev.win/` y volver a generar el provisional si hace falta.
 
 ---
@@ -303,7 +298,7 @@ en la LAN y por Tailscale; no debe aparecer aviso de certificado.
   `sudo scripts/install-win-cert.sh --issue`.
 - La zona pública solo debe tener `NS`/`SOA` (+ CAA) y el `TXT _acme-challenge` temporal.
   El comodín aparece en logs de Certificate Transparency, pero los hosts internos no.
-- `.lan` y la CA de mkcert siguen vigentes como respaldo (Fase 2: retirarlos, fuera de alcance).
+- `.lan` y la CA mkcert fueron retirados (Fase 3); solo se sirve `*.cortexdev.win`.
 
 ---
 
@@ -311,9 +306,9 @@ en la LAN y por Tailscale; no debe aparecer aviso de certificado.
 
 **Estado**: `nginx_web` (`.87`) ya sirve las apps como `*.cortexdev.win` con un comodín Let's
 Encrypt **propio**, en `/home/christian/dev/nginx/certs/cortexdev.win/`, emitido y renovado en
-ese host con `~/.acme.sh` (crontab `53 0,6,12,18 * * *`). **No se toca ese ciclo.** El repo ya
-migró `backend/catalog.yml`, los HTML del portal y `backend/app/probe.py` (bundle combinado de CAs)
-a `.win`. La capa de acceso (`.49`) tiene su propio comodín y timer, independiente.
+ese host con `~/.acme.sh` (crontab `53 0,6,12,18 * * *`). **No se toca ese ciclo.** El repo migró
+`backend/catalog.yml`, los HTML del portal y `backend/app/probe.py` (CAs del sistema) a `.win`. La
+capa de acceso (`.49`) tiene su propio comodín y timer, independiente.
 
 `pma` (phpMyAdmin) ya quedó en `.win` (vhost creado con el script y catálogo actualizado). Abajo se
 deja el procedimiento por si hay que añadir más vhosts `.win`.
@@ -380,10 +375,10 @@ scripts/check.sh                 # incluye HTTP apps .win sin -k y DNS de apps
 scripts/tailscale-dns.sh
 ```
 
-- Paridad `.lan` vs `.win` por app (mismos códigos, p. ej. `apps` 403 es normal, no hay índice).
-- Login real en `.win` de una app con sesión (Laravel/SPAs): si redirige o cookiea a `.lan`,
-  ajustar `APP_URL`/cookies en la app (repo de `.87`, fuera de este repo).
-- Desde un equipo sin la CA mkcert: `https://app-admin.cortexdev.win` sin aviso, en LAN y por
+- Cada app responde con cert LE válido (p. ej. `apps` 403 es normal, no hay índice).
+- Login real en `.win` de una app con sesión (Laravel/SPAs): si redirige a un dominio antiguo,
+  ajustar `APP_URL`/cookies en la app (repo de `.87`).
+- Desde un equipo sin nada instalado: `https://app-admin.cortexdev.win` sin aviso, en LAN y por
   Tailscale.
 
 ---
@@ -392,10 +387,10 @@ scripts/tailscale-dns.sh
 
 | Script | Dónde | Para qué |
 | --- | --- | --- |
-| `scripts/check.sh` | `.49` | Validación completa (certs, contenedores, HTTP `.lan`/`.win`, DNS, Tailscale). |
-| `scripts/tailscale-dns.sh` | `.49` | Split DNS de Tailscale + Pi-hole para `.lan`/`.win`. |
+| `scripts/check.sh` | `.49` | Validación completa (cert, contenedores, HTTP `.win`, DNS, Tailscale). |
+| `scripts/tailscale-dns.sh` | `.49` | Split DNS de Tailscale + Pi-hole para `.win`. |
 | `scripts/apps-verify-win.sh` | `.87` | Verifica los vhosts `.win` de `nginx_web`, cert LE y que el catálogo tenga vhost. |
-| `scripts/apps-audit-lan.sh` | `.87` | Reporta `.lan` en `APP_URL`/cookies/CORS/`baseHref` de las apps (riesgo de login mixto). |
+| `scripts/apps-audit-lan.sh` | `.87` | Reporta restos de dominio antiguo (`.lan`) en `APP_URL`/cookies/CORS/`baseHref` de las apps. |
 | `scripts/apps-fix-acme-reload.sh` | `.87` | Asegura que la renovación del comodín en `.87` recargue `nginx_web`. |
 | `scripts/add-app-win-vhost.sh` | `.87` | Añade un vhost proxy `.win` nuevo. |
 | `scripts/diagnose-host.sh` | cualquiera | Diagnostica ruta/puertos de un host interno (p. ej. `.166`). |

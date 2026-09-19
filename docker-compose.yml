@@ -16,13 +16,12 @@ services:
     image: cortexdev-portal-api:local
     container_name: portal_api
     restart: unless-stopped
-    # host network + bind a 127.0.0.1: nginx lo proxifica en index.cortexdev.lan/api/
+    # host network + bind a 127.0.0.1: nginx lo proxifica en index.cortexdev.win/api/
     network_mode: host
     command: uvicorn app.main:app --host 127.0.0.1 --port 8088
     environment:
       DB_PATH: /data/portal.db
       CATALOG_PATH: /app/catalog.yml
-      CA_PATH: /certs/cortexdev.lan/ca.pem
       POLL_INTERVAL: "30"
       PROBE_TIMEOUT: "5"
       RETENTION_DAYS: "7"

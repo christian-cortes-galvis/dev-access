@@ -3,10 +3,9 @@
 # Aplica los overrides DNS de la capa de acceso en Pi-hole (idempotente).
 # Se ejecuta EN ubuntu-services: scripts/dns-overrides.sh
 #
-# Gestiona los dos dominios internos:
-#   *.cortexdev.lan  wildcard a las apps + overrides de la capa de acceso
-#   *.cortexdev.win  wildcard a las apps + overrides de la capa de acceso
-# (dnsmasq usa la coincidencia mas especifica: el host gana al wildcard)
+# Gestiona SOLO *.cortexdev.win: wildcard a las apps + overrides de la capa de
+# acceso (dnsmasq usa la coincidencia mas especifica: el host gana al wildcard).
+# Ademas PURGA de misc.dnsmasq_lines cualquier linea *.cortexdev.lan (Fase 3).
 #
 # Variables:
 #   PIHOLE     nombre del contenedor de Pi-hole (solo modo docker; autodetectado si se omite)
@@ -19,8 +18,7 @@ set -uo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ACCESS_IP="${ACCESS_IP:-192.168.0.49}"
 APPS_IP="${APPS_IP:-192.168.0.87}"
-HOSTS="${HOSTS:-index ca pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker}"
-WILDCARD="address=/cortexdev.lan/${APPS_IP}"
+HOSTS="${HOSTS:-index pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker}"
 PUB_DOMAIN="cortexdev.win"
 WILDCARD_PUB="address=/${PUB_DOMAIN}/${APPS_IP}"
 
@@ -76,6 +74,11 @@ if [ -z "$existing" ]; then
   existing="$(printf '%s\n' "$cur" | sed 's/[][]//g' | tr ',' '\n' | grep -oE '[a-zA-Z_-]+=[^[:space:]]+' || true)"
 fi
 
+# Fase 3: descartar cualquier linea .lan (wildcard y overrides), conservando el resto.
+lan_count="$(printf '%s\n' "$existing" | grep -c 'cortexdev\.lan' || true)"
+existing="$(printf '%s\n' "$existing" | grep -v 'cortexdev\.lan' || true)"
+[ "$lan_count" = "0" ] && ok "sin lineas .lan que purgar" || ok "purgando $lan_count linea(s) .lan"
+
 declare -A seen=()
 lines=()
 add() {
@@ -85,11 +88,9 @@ add() {
   lines+=("$1")
 }
 
-add "$WILDCARD"
 add "$WILDCARD_PUB"
 while IFS= read -r l; do add "$l"; done <<< "$existing"
 for h in $HOSTS; do
-  add "address=/${h}.cortexdev.lan/${ACCESS_IP}"
   add "address=/${h}.${PUB_DOMAIN}/${ACCESS_IP}"
 done
 
@@ -140,22 +141,28 @@ info "4/4 Verificacion (dig @127.0.0.1)"
 if ! command -v dig >/dev/null; then
   bad "dig no instalado; no se pudo verificar"
 else
-  for d in cortexdev.lan "$PUB_DOMAIN"; do
-    for h in $HOSTS; do
-      r="$(dig_answer "${h}.${d}")"
-      if [ "$r" = "$ACCESS_IP" ]; then
-        ok "${h}.${d} -> $ACCESS_IP"
-      else
-        bad "${h}.${d} -> ${r:-sin respuesta}"
-      fi
-    done
-    r="$(dig_answer "app-admin.${d}")"
-    if [ "$r" = "$APPS_IP" ]; then
-      ok "app-admin.${d} -> $APPS_IP (wildcard apps)"
+  for h in $HOSTS; do
+    r="$(dig_answer "${h}.${PUB_DOMAIN}")"
+    if [ "$r" = "$ACCESS_IP" ]; then
+      ok "${h}.${PUB_DOMAIN} -> $ACCESS_IP"
     else
-      bad "app-admin.${d} -> ${r:-sin respuesta} (wildcard roto)"
+      bad "${h}.${PUB_DOMAIN} -> ${r:-sin respuesta}"
     fi
   done
+  r="$(dig_answer "app-admin.${PUB_DOMAIN}")"
+  if [ "$r" = "$APPS_IP" ]; then
+    ok "app-admin.${PUB_DOMAIN} -> $APPS_IP (wildcard apps)"
+  else
+    bad "app-admin.${PUB_DOMAIN} -> ${r:-sin respuesta} (wildcard roto)"
+  fi
+
+  # Fase 3: .lan ya no debe resolver
+  r="$(dig_answer "index.cortexdev.lan")"
+  if [ -z "$r" ]; then
+    ok "index.cortexdev.lan sin respuesta (purga .lan OK)"
+  else
+    bad "index.cortexdev.lan todavia resuelve a $r"
+  fi
 fi
 
 if [ "$FAIL" != "0" ]; then
@@ -163,4 +170,4 @@ if [ "$FAIL" != "0" ]; then
   ftl --config misc.dnsmasq_lines 2>/dev/null || true
   exit 1
 fi
-printf '\n\033[1;32mOverrides DNS aplicados\033[0m\n'
+printf '\n\033[1;32mOverrides DNS aplicados (.win, .lan purgado)\033[0m\n'
