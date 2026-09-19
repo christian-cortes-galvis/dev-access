@@ -304,3 +304,72 @@ en la LAN y por Tailscale; no debe aparecer aviso de certificado.
 - La zona pública solo debe tener `NS`/`SOA` (+ CAA) y el `TXT _acme-challenge` temporal.
   El comodín aparece en logs de Certificate Transparency, pero los hosts internos no.
 - `.lan` y la CA de mkcert siguen vigentes como respaldo (Fase 2: retirarlos, fuera de alcance).
+
+---
+
+## 11. Apps de `ubuntu-docker` (Fase 2)
+
+**Estado**: `nginx_web` (`.87`) ya sirve las apps como `*.cortexdev.win` con un comodín Let's
+Encrypt **propio**, en `/home/christian/dev/nginx/certs/cortexdev.win/`, emitido y renovado en
+ese host con `~/.acme.sh` (crontab `53 0,6,12,18 * * *`). **No se toca ese ciclo.** El repo ya
+migró `backend/catalog.yml`, los HTML del portal y `backend/app/probe.py` (bundle combinado de CAs)
+a `.win`. La capa de acceso (`.49`) tiene su propio comodín y timer, independiente.
+
+Solo falta `pma` (phpMyAdmin): no tiene vhost `.win` y por eso el catálogo apunta a
+`pma.cortexdev.lan`.
+
+### 11.1 Crear `pma.cortexdev.win` en `nginx_web` (manual)
+
+En `ubuntu-docker` (`ssh christian@192.168.0.87`), crear
+`/home/christian/dev/nginx/conf.d/pma.conf` copiando el bloque `.lan` de `cortexdev-lan.conf`
+y adaptándolo:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name pma.cortexdev.win;
+
+    ssl_certificate     /etc/nginx/certs/cortexdev.win/cortexdev.win.pem;
+    ssl_certificate_key /etc/nginx/certs/cortexdev.win/cortexdev.win-key.pem;
+
+    location / {
+        proxy_pass http://phpmyadmin:80;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Validar y recargar:
+
+```bash
+docker exec nginx_web nginx -t && docker exec nginx_web nginx -s reload
+curl -sSI https://pma.cortexdev.win/    # != 502
+```
+
+### 11.2 Pasar `pma` a `.win` en el catálogo
+
+En `ubuntu-services`, quitar el `TODO` de `backend/catalog.yml` y usar:
+
+```yaml
+    url: https://pma.cortexdev.win
+```
+
+Luego `scripts/deploy.sh` y comprobar en el portal que `pma` queda online.
+
+### 11.3 Verificación
+
+```bash
+scripts/check.sh                 # incluye HTTP apps .win sin -k y DNS de apps
+scripts/tailscale-dns.sh
+```
+
+- Paridad `.lan` vs `.win` por app (mismos códigos, p. ej. `apps` 403 es normal, no hay índice).
+- Login real en `.win` de una app con sesión (Laravel/SPAs): si redirige o cookiea a `.lan`,
+  ajustar `APP_URL`/cookies en la app (repo de `.87`, fuera de este repo).
+- Desde un equipo sin la CA mkcert: `https://app-admin.cortexdev.win` sin aviso, en LAN y por
+  Tailscale.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SPAs y utilidades · cortexdev.lan</title>
+<title>SPAs y utilidades · cortexdev.win</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/favicons/cortexdev-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
 <script src="/theme.js?v=1"></script>
@@ -50,13 +50,15 @@
   </div>
 
   <div class="notice">
-    <strong>Nota:</strong> la única llamada interna que se mantiene en <code>.win</code> es
-    <code>portal-pacientes &rarr; admin-portal-pacientes</code> (<code>/api/</code>), que no pasa
-    por el navegador. El resto de apps y utilidades son accesibles por <code>.lan</code>.
+    <strong>Nota:</strong> las apps y utilidades se sirven por <code>*.cortexdev.win</code> con
+    certificado público. <code>portal-pacientes &rarr; admin-portal-pacientes</code>
+    (<code>/api/</code>) también es interno. <code>*.cortexdev.lan</code> sigue como respaldo
+    (requiere la CA de mkcert). phpMyAdmin aún no tiene vhost <code>.win</code>: usa
+    <code>pma.cortexdev.lan</code>.
   </div>
 
   <footer class="bottom">
-    <span>cortexdev.lan &middot; SPAs y utilidades</span>
+    <span>cortexdev.win &middot; SPAs y utilidades</span>
     <span><a href="/">Volver al índice</a></span>
   </footer>
 

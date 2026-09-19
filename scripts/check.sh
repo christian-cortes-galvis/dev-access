@@ -117,6 +117,22 @@ else
   bad "ca.cortexdev.win /cortexdev-lan-ca.crt -> ${c:-000} sin -k"
 fi
 
+# Apps de ubuntu-docker (192.168.0.87): el certificado lo sirve nginx_web (.win).
+# Se acepta cualquier codigo HTTP != 000 (000 = fallo de TLS/hostname).
+info "HTTP apps .win (TLS publico sin -k)"
+code_app() {
+  curl -sS -o /dev/null -w '%{http_code}' --resolve "$1:443:192.168.0.87" "https://$1/" 2>/dev/null || true
+}
+for h in apps.cortexdev.win admin-portal-pacientes.cortexdev.win portal-pacientes.cortexdev.win \
+         centro-apoyo.cortexdev.win bot-gomedisys.cortexdev.win analisis-datos.cortexdev.win; do
+  c="$(code_app "$h")"
+  if [ -n "$c" ] && [ "$c" != "000" ]; then
+    ok "$h -> $c (TLS valido)"
+  else
+    bad "$h -> ${c:-000} (TLS/HTTP)"
+  fi
+done
+
 info "API del portal (portal-api)"
 c="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8088/api/health || true)"
 if [ "$c" = "200" ]; then
@@ -155,12 +171,14 @@ if command -v dig >/dev/null; then
       fi
     done
 
-    r="$(dig_answer "app-admin.$d")"
-    if [ "$r" = "192.168.0.87" ]; then
-      ok "app-admin.$d -> 192.168.0.87 (wildcard apps)"
-    else
-      bad "app-admin.$d -> ${r:-sin respuesta}"
-    fi
+    for a in app-admin apps; do
+      r="$(dig_answer "$a.$d")"
+      if [ "$r" = "192.168.0.87" ]; then
+        ok "$a.$d -> 192.168.0.87 (wildcard apps)"
+      else
+        bad "$a.$d -> ${r:-sin respuesta}"
+      fi
+    done
   done
 else
   bad "dig no instalado; no se pudo verificar DNS"

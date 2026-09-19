@@ -25,7 +25,7 @@ categories:
     card_tech: [laravel]
   - slug: codeigniter
     title: CodeIgniter / PHP
-    description: Apps PHP 8.1 bajo <code>apps.cortexdev.lan/&lt;ruta&gt;</code> y <code>csr-twofa</code>.
+    description: Apps PHP 8.1 bajo <code>apps.cortexdev.win/&lt;ruta&gt;</code> y <code>csr-twofa</code>.
     url: /codeigniter.html
     note_header: Nota
     count_label: apps
@@ -43,7 +43,7 @@ services:
   - slug: portainer
     name: Portainer CE
     category: infraestructura
-    url: https://portainer.cortexdev.lan
+    url: https://portainer.cortexdev.win
     tech: [portainer]
     badge: false
     note: "<code>portainer:9000</code> (docker)"
@@ -51,7 +51,7 @@ services:
   - slug: proxmox
     name: Proxmox VE
     category: infraestructura
-    url: https://proxmox.cortexdev.lan
+    url: https://proxmox.cortexdev.win
     tech: [proxmox]
     badge: false
     note: "192.168.0.224:8006"
@@ -59,15 +59,15 @@ services:
   - slug: backups
     name: Proxmox Backup Server
     category: infraestructura
-    url: https://backups.cortexdev.lan
+    url: https://backups.cortexdev.win
     tech: [proxmox]
     badge: false
-    note: 'PBS 192.168.0.166:8007 &middot; alias <a href="https://pbs.cortexdev.lan" target="_blank" rel="noopener">pbs</a>'
+    note: 'PBS 192.168.0.166:8007 &middot; alias <a href="https://pbs.cortexdev.win" target="_blank" rel="noopener">pbs</a>'
     sort: 30
   - slug: pihole
     name: Pi-hole
     category: infraestructura
-    url: https://pihole.cortexdev.lan
+    url: https://pihole.cortexdev.win
     tech: [pihole]
     badge: false
     note: "192.168.0.49 &rarr; <code>/admin/</code> (DNS de la LAN)"
@@ -75,16 +75,16 @@ services:
   - slug: uptime
     name: Uptime Kuma
     category: infraestructura
-    url: https://uptime.cortexdev.lan
+    url: https://uptime.cortexdev.win
     tech: [uptime-kuma]
     badge: false
-    note: '192.168.0.49:3001 &rarr; <code>/dashboard</code> &middot; alias <a href="https://kuma.cortexdev.lan" target="_blank" rel="noopener">kuma</a>'
+    note: '192.168.0.49:3001 &rarr; <code>/dashboard</code> &middot; alias <a href="https://kuma.cortexdev.win" target="_blank" rel="noopener">kuma</a>'
     sort: 50
   - slug: netdata-backups
     name: "Netdata · proxmox-backups"
     category: infraestructura
-    url: https://netdata-backups.cortexdev.lan
-    probe_url: https://netdata-backups.cortexdev.lan/api/v1/info
+    url: https://netdata-backups.cortexdev.win
+    probe_url: https://netdata-backups.cortexdev.win/api/v1/info
     accept: [200]
     tech: [netdata]
     badge: false
@@ -93,8 +93,8 @@ services:
   - slug: netdata-proxmox
     name: "Netdata · proxmox-server"
     category: infraestructura
-    url: https://netdata-proxmox.cortexdev.lan
-    probe_url: https://netdata-proxmox.cortexdev.lan/api/v1/info
+    url: https://netdata-proxmox.cortexdev.win
+    probe_url: https://netdata-proxmox.cortexdev.win/api/v1/info
     accept: [200]
     tech: [netdata]
     badge: false
@@ -103,8 +103,8 @@ services:
   - slug: netdata-docker
     name: "Netdata · ubuntu-docker"
     category: infraestructura
-    url: https://netdata-docker.cortexdev.lan
-    probe_url: https://netdata-docker.cortexdev.lan/api/v1/info
+    url: https://netdata-docker.cortexdev.win
+    probe_url: https://netdata-docker.cortexdev.win/api/v1/info
     accept: [200]
     tech: [netdata]
     badge: false
@@ -113,8 +113,8 @@ services:
   - slug: netdata-services
     name: "Netdata · ubuntu-services"
     category: infraestructura
-    url: https://netdata-services.cortexdev.lan
-    probe_url: https://netdata-services.cortexdev.lan/api/v1/info
+    url: https://netdata-services.cortexdev.win
+    probe_url: https://netdata-services.cortexdev.win/api/v1/info
     accept: [200]
     tech: [netdata]
     badge: false
@@ -125,7 +125,7 @@ services:
   - slug: analisis-datos
     name: Analítica de datos
     category: laravel
-    url: https://analisis-datos.cortexdev.lan
+    url: https://analisis-datos.cortexdev.win
     tech: [laravel]
     icon: analisis-datos.png
     color: "#0ea5e9"
@@ -134,16 +134,16 @@ services:
   - slug: app-admin
     name: Admin App Móvil
     category: laravel
-    url: https://app-admin.cortexdev.lan
+    url: https://app-admin.cortexdev.win
     tech: [laravel]
     icon: app-admin.png
     color: "#8b5cf6"
-    note: 'Alias: <a href="https://pacientes.cortexdev.lan" target="_blank" rel="noopener">pacientes</a> y <a href="https://empleados.cortexdev.lan" target="_blank" rel="noopener">empleados</a>'
+    note: 'Alias: <a href="https://pacientes.cortexdev.win" target="_blank" rel="noopener">pacientes</a> y <a href="https://empleados.cortexdev.win" target="_blank" rel="noopener">empleados</a>'
     sort: 110
   - slug: ruta56
     name: Ruta 56
     category: laravel
-    url: https://ruta56.cortexdev.lan
+    url: https://ruta56.cortexdev.win
     tech: [laravel]
     icon: ruta56.svg
     color: "#f59e0b"
@@ -152,7 +152,7 @@ services:
   - slug: admin-portal-pacientes
     name: Admin Portal Pacientes
     category: laravel
-    url: https://admin-portal-pacientes.cortexdev.lan
+    url: https://admin-portal-pacientes.cortexdev.win
     tech: [laravel]
     icon: admin-portal-pacientes.png
     color: "#22c55e"
@@ -161,7 +161,7 @@ services:
   - slug: gastro
     name: Gastro
     category: laravel
-    url: https://gastro.cortexdev.lan
+    url: https://gastro.cortexdev.win
     tech: [laravel]
     icon: gastro.png
     color: "#ef4444"
@@ -170,7 +170,7 @@ services:
   - slug: cafezam
     name: Cafezam
     category: laravel
-    url: https://cafezam.cortexdev.lan
+    url: https://cafezam.cortexdev.win
     tech: [laravel]
     icon: cafezam.png
     color: "#b45309"
@@ -179,7 +179,7 @@ services:
   - slug: csr-admin
     name: CSR Admin
     category: laravel
-    url: https://csr-admin.cortexdev.lan
+    url: https://csr-admin.cortexdev.win
     tech: [laravel]
     icon: csr-admin.png
     color: "#6366f1"
@@ -188,7 +188,7 @@ services:
   - slug: coopsercont
     name: Coopsercont
     category: laravel
-    url: https://coopsercont.cortexdev.lan
+    url: https://coopsercont.cortexdev.win
     tech: [laravel]
     icon: coopsercont.png
     color: "#14b8a6"
@@ -197,7 +197,7 @@ services:
   - slug: tableros
     name: Tableros
     category: laravel
-    url: https://tableros.cortexdev.lan
+    url: https://tableros.cortexdev.win
     tech: [laravel]
     icon: tableros.png
     color: "#0891b2"
@@ -206,7 +206,7 @@ services:
   - slug: sarlaft
     name: SARLAFT
     category: laravel
-    url: https://sarlaft.cortexdev.lan
+    url: https://sarlaft.cortexdev.win
     tech: [laravel]
     icon: sarlaft.png
     color: "#e11d48"
@@ -215,7 +215,7 @@ services:
   - slug: glampings-club
     name: Glampings Club
     category: laravel
-    url: https://glampings-club.cortexdev.lan
+    url: https://glampings-club.cortexdev.win
     tech: [laravel]
     icon: glampings-club.png
     color: "#84cc16"
@@ -224,7 +224,7 @@ services:
   - slug: sapg-laravel
     name: SAPG
     category: laravel
-    url: https://sapg.cortexdev.lan
+    url: https://sapg.cortexdev.win
     tech: [laravel]
     icon: sapg.png
     color: "#06b6d4"
@@ -235,7 +235,7 @@ services:
   - slug: csr-support
     name: CSR Support
     category: codeigniter
-    url: https://apps.cortexdev.lan/csr-support/
+    url: https://apps.cortexdev.win/csr-support/
     tech: [codeigniter]
     icon: csr-support.png
     color: "#ef4223"
@@ -244,7 +244,7 @@ services:
   - slug: sapg-ci
     name: SAPG
     category: codeigniter
-    url: https://apps.cortexdev.lan/sapg/
+    url: https://apps.cortexdev.win/sapg/
     tech: [codeigniter]
     icon: sapg.png
     color: "#06b6d4"
@@ -253,7 +253,7 @@ services:
   - slug: enter
     name: Enter
     category: codeigniter
-    url: https://apps.cortexdev.lan/enter/
+    url: https://apps.cortexdev.win/enter/
     tech: [codeigniter]
     icon: enter.png
     color: "#0ea5e9"
@@ -262,7 +262,7 @@ services:
   - slug: gastro33-snappy
     name: Gastro33 Snappy
     category: codeigniter
-    url: https://apps.cortexdev.lan/gastro33-snappy/
+    url: https://apps.cortexdev.win/gastro33-snappy/
     tech: [php]
     icon: gastro33.png
     color: "#7c3aed"
@@ -271,7 +271,7 @@ services:
   - slug: gastro33-solicitudes
     name: Gastro33 Solicitudes
     category: codeigniter
-    url: https://apps.cortexdev.lan/gastro33-solicitudes/
+    url: https://apps.cortexdev.win/gastro33-solicitudes/
     tech: [php]
     icon: gastro33.png
     color: "#8b5cf6"
@@ -280,7 +280,7 @@ services:
   - slug: ticware-web
     name: Ticware Web
     category: codeigniter
-    url: https://apps.cortexdev.lan/ticware_web/
+    url: https://apps.cortexdev.win/ticware_web/
     tech: [php]
     icon: ticware_web.png
     color: "#6d28d9"
@@ -289,7 +289,7 @@ services:
   - slug: powerbi
     name: PowerBI
     category: codeigniter
-    url: https://apps.cortexdev.lan/powerbi/
+    url: https://apps.cortexdev.win/powerbi/
     tech: [powerbi]
     icon: powerbi.png
     color: "#ca8a04"
@@ -298,7 +298,7 @@ services:
   - slug: sapio
     name: Sapio
     category: codeigniter
-    url: https://apps.cortexdev.lan/sapio/
+    url: https://apps.cortexdev.win/sapio/
     tech: [php]
     icon: sapio.png
     color: "#a855f7"
@@ -307,7 +307,7 @@ services:
   - slug: historias-clinicas
     name: Historias Clínicas
     category: codeigniter
-    url: https://apps.cortexdev.lan/historias_clinicas/
+    url: https://apps.cortexdev.win/historias_clinicas/
     tech: [php]
     icon: historias_clinicas.png
     color: "#ec4899"
@@ -316,7 +316,7 @@ services:
   - slug: chequeos
     name: Chequeos
     category: codeigniter
-    url: https://apps.cortexdev.lan/chequeos/
+    url: https://apps.cortexdev.win/chequeos/
     tech: [php]
     icon: chequeos.png
     color: "#f97316"
@@ -327,7 +327,7 @@ services:
   - slug: portal-pacientes
     name: Portal Pacientes
     category: spas
-    url: https://portal-pacientes.cortexdev.lan
+    url: https://portal-pacientes.cortexdev.win
     tech: [angular]
     icon: portal-pacientes.png
     color: "#dd0031"
@@ -336,7 +336,7 @@ services:
   - slug: centro-apoyo
     name: Centro de Apoyo
     category: spas
-    url: https://centro-apoyo.cortexdev.lan
+    url: https://centro-apoyo.cortexdev.win
     tech: [react]
     icon: centro-apoyo.png
     color: "#0891b2"
@@ -345,7 +345,7 @@ services:
   - slug: bot-gomedisys
     name: Bot Gomedisys
     category: spas
-    url: https://bot-gomedisys.cortexdev.lan
+    url: https://bot-gomedisys.cortexdev.win
     tech: [python]
     icon: bot-gomedisys.png
     color: "#3776ab"
@@ -354,18 +354,20 @@ services:
   - slug: pma
     name: phpMyAdmin
     category: spas
+    # TODO: pasar a https://pma.cortexdev.win cuando exista pma.conf (.win) en nginx_web (.87)
     url: https://pma.cortexdev.lan
     tech: [phpmyadmin]
     badge: false
     note: "Administración de MySQL"
     sort: 430
+
   - slug: ca
     name: CA local (mkcert)
     category: spas
-    url: http://ca.cortexdev.lan/
-    probe_url: http://ca.cortexdev.lan/cortexdev-lan-ca.crt
+    url: https://ca.cortexdev.win/
+    probe_url: https://ca.cortexdev.win/cortexdev-lan-ca.crt
     accept: [200]
     tech: [certificate]
     badge: false
-    note: "Descarga <code>cortexdev-lan-ca.crt</code> para confiar en <code>*.cortexdev.lan</code>"
+    note: "Descarga <code>cortexdev-lan-ca.crt</code> (solo para los hosts .lan de respaldo)"
     sort: 440

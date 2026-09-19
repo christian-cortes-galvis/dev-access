@@ -276,6 +276,24 @@ acceso para ambos dominios (`address=/cortexdev.win/192.168.0.87` y
 hay que añadir un segundo **restricted nameserver** `192.168.0.49 → cortexdev.win` (además de
 `cortexdev.lan`); si algún equipo usa exit node, activar "Use with exit node".
 
+### Apps de `ubuntu-docker` (Fase 2)
+
+Las apps ya se sirven como `*.cortexdev.win`: `nginx_web` (192.168.0.87) tiene un `server` block
+`.win` por app y usa un comodín Let's Encrypt en `certs/cortexdev.win/` de ese host, **emitido y
+renovado allí** con `~/.acme.sh` (crontab 0/6/12/18). Es independiente de la capa de acceso.
+
+- Pi-hole resuelve el wildcard `address=/cortexdev.win/192.168.0.87` (apps) y los overrides de la
+  capa de acceso a `192.168.0.49`; Tailscale tiene el split DNS `cortexdev.win`.
+- `backend/catalog.yml` y los enlaces del portal usan `.win`. `backend/app/probe.py` combina las
+  CAs del sistema (valida Let's Encrypt) con la CA mkcert, para que convivan `.win` y `.lan`.
+- `pma` (phpMyAdmin) es la única excepción: aún no tiene vhost `.win` en `nginx_web`, así que el
+  catálogo apunta a `pma.cortexdev.lan`. Para pasarlo a `.win`: crear
+  `/home/christian/dev/nginx/conf.d/pma.conf` (copia del bloque `.lan` de `cortexdev-lan.conf` con
+  `server_name pma.cortexdev.win` y el par de certs `.win`), recargar `nginx_web` y quitar el
+  `TODO` de `backend/catalog.yml`.
+- `.lan` sigue como respaldo en las apps (catch-all `cortexdev-lan.conf`). Si una app fija
+  `APP_URL`/cookies a `.lan`, el login puede quedar mixto hasta ajustarlo en la app.
+
 ## Portal dinámico (catálogo + estado)
 
 El portal ya no lleva las listas hardcodeadas: `portal-api` (contenedor `portal_api`, FastAPI +
@@ -288,7 +306,7 @@ SQLite) guarda el catálogo de servicios y comprueba su estado.
   servicio (`probe_url` opcional), sin seguir redirecciones, con timeout de `PROBE_TIMEOUT`.
   Un código en `accept` es online (2xx) o login (3xx/401/403); timeout, error o 5xx = offline.
   Los Netdata usan `/api/v1/info` para no cargar el dashboard.
-- API (bajo `index.cortexdev.lan/api/`, bind local `127.0.0.1:8088`):
+- API (bajo `index.cortexdev.win/api/`, bind local `127.0.0.1:8088`):
   - `GET /api/health` → estado de la BD.
   - `GET /api/portal` → catálogo + categorías + estado + `uptime_24h`.
   - `GET /api/status[?refresh=1]` → solo estados, para el refresco del navegador (cada 20s).

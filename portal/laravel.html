@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Laravel · cortexdev.lan</title>
+<title>Laravel · cortexdev.win</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/favicons/cortexdev-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
 <script src="/theme.js?v=1"></script>
@@ -31,7 +31,7 @@
     </nav>
   </header>
 
-  <div class="section-title"><span data-count="laravel">&mdash;</span> proyectos &middot; catch-all <code>*.cortexdev.lan</code></div>
+  <div class="section-title"><span data-count="laravel">&mdash;</span> proyectos &middot; vhosts <code>*.cortexdev.win</code> (respaldo catch-all <code>.lan</code>)</div>
 
   <table class="links" data-category="laravel">
     <thead>
@@ -47,13 +47,14 @@
   </div>
 
   <div class="notice">
-    Cada app resuelve por el vhost catch-all de <code>nginx/conf.d/cortexdev-lan.conf</code>
-    (<code>root /var/www/html/&lt;app&gt;/public</code>). Su <code>APP_URL</code> y cookies de
-    sesión ya apuntan a <code>.lan</code>.
+    Cada app tiene su vhost <code>.win</code> en <code>nginx_web</code> (.87), con certificado
+    público; <code>cortexdev-lan.conf</code> queda como catch-all de respaldo
+    (<code>root /var/www/html/&lt;app&gt;/public</code>). Si una app fija su <code>APP_URL</code>
+    o cookies a <code>.lan</code>, el login puede quedar mixto hasta ajustarlo en la app.
   </div>
 
   <footer class="bottom">
-    <span>cortexdev.lan &middot; Laravel</span>
+    <span>cortexdev.win &middot; Laravel</span>
     <span><a href="/">Volver al índice</a></span>
   </footer>
 

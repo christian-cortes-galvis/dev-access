@@ -4,7 +4,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Infraestructura · cortexdev.lan</title>
+	<title>Infraestructura · cortexdev.win</title>
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicons/cortexdev-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
 <script src="/theme.js?v=1"></script>
@@ -21,7 +21,7 @@
 				<div class="logo"><img src="/favicons/cortexdev-180.png" alt="CortexDev" width="42" height="42"></div>
 				<div>
 					<h1>Infraestructura</h1>
-					<p>Servicios de la LAN expuestos vía <code>*.cortexdev.lan</code></p>
+					<p>Servicios de la LAN expuestos vía <code>*.cortexdev.win</code></p>
 				</div>
 			</div>
 			<nav class="crumbs">
@@ -57,14 +57,15 @@
 		</div>
 
 		<div class="notice">
-			<strong>DNS:</strong> Pi-hole resuelve el wildcard <code>address=/cortexdev.lan/192.168.0.87</code>
-			(<code>misc.dnsmasq_lines</code>). <strong>TLS:</strong> certificado wildcard de mkcert en
-			<code>nginx/certs/cortexdev.lan/</code>; la CA se distribuye en
-			<a href="http://ca.cortexdev.lan/">http://ca.cortexdev.lan/</a>.
+			<strong>DNS:</strong> Pi-hole resuelve <code>address=/cortexdev.win/192.168.0.87</code>
+			(wildcard apps) y <code>address=/&lt;host&gt;.cortexdev.win/192.168.0.49</code> para la capa
+			de acceso (<code>misc.dnsmasq_lines</code>). <strong>TLS:</strong> certificado público
+			(Let's Encrypt) en <code>certs/cortexdev.win/</code>; el respaldo <code>*.cortexdev.lan</code>
+			usa la CA de mkcert, en <a href="https://ca.cortexdev.win/">https://ca.cortexdev.win/</a>.
 		</div>
 
 		<footer class="bottom">
-			<span>cortexdev.lan &middot; Infraestructura</span>
+			<span>cortexdev.win &middot; Infraestructura</span>
 			<span><a href="/">Volver al índice</a></span>
 		</footer>
 
