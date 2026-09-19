@@ -124,7 +124,7 @@ code_app() {
   curl -sS -o /dev/null -w '%{http_code}' --resolve "$1:443:192.168.0.87" "https://$1/" 2>/dev/null || true
 }
 for h in apps.cortexdev.win admin-portal-pacientes.cortexdev.win portal-pacientes.cortexdev.win \
-         centro-apoyo.cortexdev.win bot-gomedisys.cortexdev.win analisis-datos.cortexdev.win; do
+         centro-apoyo.cortexdev.win bot-gomedisys.cortexdev.win analisis-datos.cortexdev.win pma.cortexdev.win; do
   c="$(code_app "$h")"
   if [ -n "$c" ] && [ "$c" != "000" ]; then
     ok "$h -> $c (TLS valido)"

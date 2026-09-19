@@ -315,10 +315,10 @@ ese host con `~/.acme.sh` (crontab `53 0,6,12,18 * * *`). **No se toca ese ciclo
 migró `backend/catalog.yml`, los HTML del portal y `backend/app/probe.py` (bundle combinado de CAs)
 a `.win`. La capa de acceso (`.49`) tiene su propio comodín y timer, independiente.
 
-Solo falta `pma` (phpMyAdmin): no tiene vhost `.win` y por eso el catálogo apunta a
-`pma.cortexdev.lan`.
+`pma` (phpMyAdmin) ya quedó en `.win` (vhost creado con el script y catálogo actualizado). Abajo se
+deja el procedimiento por si hay que añadir más vhosts `.win`.
 
-### 11.1 Crear `pma.cortexdev.win` en `nginx_web`
+### 11.1 Crear un vhost `*.cortexdev.win` en `nginx_web`
 
 Desde `ubuntu-docker` (donde también está el repo `cortexdev-access`):
 
@@ -367,15 +367,11 @@ curl -sSI https://pma.cortexdev.win/    # != 502
 
 </details>
 
-### 11.2 Pasar `pma` a `.win` en el catálogo
+### 11.2 Añadir otros vhosts proxy
 
-En `ubuntu-services`, quitar el `TODO` de `backend/catalog.yml` y usar:
-
-```yaml
-    url: https://pma.cortexdev.win
-```
-
-Luego `scripts/deploy.sh` y comprobar en el portal que `pma` queda online.
+Para una app proxy nueva, en `ubuntu-docker`:
+`scripts/add-app-win-vhost.sh <host>.cortexdev.win <proxy_pass>`. Luego añadir/actualizar su URL en
+`backend/catalog.yml` (en `.49`) y `scripts/deploy.sh`.
 
 ### 11.3 Verificación
 

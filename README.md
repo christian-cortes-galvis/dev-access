@@ -287,11 +287,9 @@ renovado allí** con `~/.acme.sh` (crontab 0/6/12/18). Es independiente de la ca
   capa de acceso a `192.168.0.49`; Tailscale tiene el split DNS `cortexdev.win`.
 - `backend/catalog.yml` y los enlaces del portal usan `.win`. `backend/app/probe.py` combina las
   CAs del sistema (valida Let's Encrypt) con la CA mkcert, para que convivan `.win` y `.lan`.
-- `pma` (phpMyAdmin) es la única excepción: aún no tiene vhost `.win` en `nginx_web`, así que el
-  catálogo apunta a `pma.cortexdev.lan`. Para pasarlo a `.win`, en `ubuntu-docker`:
-  `scripts/add-app-win-vhost.sh` (atajo pma → `http://phpmyadmin:80`; genérico
-  `<host>.cortexdev.win <proxy_pass>`). Escribe el vhost con el cert `.win`, valida, recarga y
-  verifica; después quitar el `TODO` de `backend/catalog.yml`.
+- Para añadir un vhost `.win` nuevo (proxy), en `ubuntu-docker`:
+  `scripts/add-app-win-vhost.sh <host>.cortexdev.win <proxy_pass>` (atajo sin args:
+  pma → `http://phpmyadmin:80`). Escribe el vhost con el cert `.win`, valida, recarga y verifica.
 - `.lan` sigue como respaldo en las apps (catch-all `cortexdev-lan.conf`). Si una app fija
   `APP_URL`/cookies a `.lan`, el login puede quedar mixto hasta ajustarlo en la app.
 

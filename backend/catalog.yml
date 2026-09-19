@@ -354,8 +354,7 @@ services:
   - slug: pma
     name: phpMyAdmin
     category: spas
-    # TODO: pasar a https://pma.cortexdev.win cuando exista pma.conf (.win) en nginx_web (.87)
-    url: https://pma.cortexdev.lan
+    url: https://pma.cortexdev.win
     tech: [phpmyadmin]
     badge: false
     note: "Administración de MySQL"
