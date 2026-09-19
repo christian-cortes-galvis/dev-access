@@ -294,8 +294,9 @@ renovado allí** con `~/.acme.sh` (crontab 0/6/12/18). Es independiente de la ca
 - Para añadir un vhost `.win` nuevo (proxy), en `ubuntu-docker`:
   `scripts/add-app-win-vhost.sh <host>.cortexdev.win <proxy_pass>` (atajo sin args:
   pma → `http://phpmyadmin:80`). Escribe el vhost con el cert `.win`, valida, recarga y verifica.
-- `.lan` sigue como respaldo en las apps (catch-all `cortexdev-lan.conf`). Si una app fija
-  `APP_URL`/cookies a `.lan`, el login puede quedar mixto hasta ajustarlo en la app.
+- Configured apps: `APP_URL`, `BASE_URL`, `SANCTUM_STATEFUL_DOMAINS` y los frontends
+  (Angular/React) ya usan `.win`; `.lan` sigue como respaldo (catch-all `cortexdev-lan.conf`)
+  para enlaces guardados y equipos con la CA mkcert instalada.
 
 ## Portal dinámico (catálogo + estado)
 
