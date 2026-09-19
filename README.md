@@ -23,6 +23,10 @@ systemd/acme-renew.timer
 scripts/install-certs.sh
 scripts/install-win-cert.sh        # cert *.cortexdev.win: provisional / emision Let's Encrypt
 scripts/add-app-win-vhost.sh       # en ubuntu-docker: añade un vhost proxy *.cortexdev.win
+scripts/apps-verify-win.sh         # en ubuntu-docker: verifica los vhosts .win de nginx_web
+scripts/apps-audit-lan.sh          # en ubuntu-docker: audita APP_URL/cookies .lan en las apps
+scripts/apps-fix-acme-reload.sh    # en ubuntu-docker: asegura reload de nginx_web al renovar
+scripts/diagnose-host.sh           # diagnostica puertos/servicios de un host interno
 scripts/acme-renew.sh              # renovacion periodica (acme.sh --cron) para systemd
 scripts/dns-overrides.sh           # overrides DNS de la capa de acceso en Pi-hole (idempotente)
 scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole (acceso remoto .lan/.win)

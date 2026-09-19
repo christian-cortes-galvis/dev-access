@@ -385,3 +385,29 @@ scripts/tailscale-dns.sh
   ajustar `APP_URL`/cookies en la app (repo de `.87`, fuera de este repo).
 - Desde un equipo sin la CA mkcert: `https://app-admin.cortexdev.win` sin aviso, en LAN y por
   Tailscale.
+
+---
+
+## 12. Scripts de mantenimiento
+
+| Script | Dónde | Para qué |
+| --- | --- | --- |
+| `scripts/check.sh` | `.49` | Validación completa (certs, contenedores, HTTP `.lan`/`.win`, DNS, Tailscale). |
+| `scripts/tailscale-dns.sh` | `.49` | Split DNS de Tailscale + Pi-hole para `.lan`/`.win`. |
+| `scripts/apps-verify-win.sh` | `.87` | Verifica los vhosts `.win` de `nginx_web`, cert LE y que el catálogo tenga vhost. |
+| `scripts/apps-audit-lan.sh` | `.87` | Reporta `.lan` en `APP_URL`/cookies/CORS/`baseHref` de las apps (riesgo de login mixto). |
+| `scripts/apps-fix-acme-reload.sh` | `.87` | Asegura que la renovación del comodín en `.87` recargue `nginx_web`. |
+| `scripts/add-app-win-vhost.sh` | `.87` | Añade un vhost proxy `.win` nuevo. |
+| `scripts/diagnose-host.sh` | cualquiera | Diagnostica ruta/puertos de un host interno (p. ej. `.166`). |
+
+```bash
+# en ubuntu-services
+scripts/check.sh
+scripts/diagnose-host.sh 192.168.0.166
+
+# en ubuntu-docker
+cd ~/cortexdev-access
+scripts/apps-verify-win.sh
+scripts/apps-audit-lan.sh
+scripts/apps-fix-acme-reload.sh
+```
