@@ -64,7 +64,7 @@ Debe quedar solo `NS`, `SOA` y, durante la emisión, el `TXT _acme-challenge` te
 Por API (necesitas un token con `Zone:DNS:Edit`; el mismo que usarás para ACME):
 
 ```bash
-export CF_TOKEN='**************************'
+export CF_TOKEN='****************'
 ZONE_ID="$(curl -s -H "Authorization: Bearer $CF_TOKEN" \
   'https://api.cloudflare.com/client/v4/zones?name=cortexdev.win' | jq -r '.result[0].id')"
 echo "ZONE_ID=$ZONE_ID"
@@ -107,7 +107,7 @@ dig +short cortexdev.win A @1.1.1.1       # debe quedar VACIO
 
 ```bash
 sudo install -d -m 700 /etc/cortexdev
-printf 'CF_Token=*************************************\n' | sudo tee /etc/cortexdev/acme.env >/dev/null
+printf 'CF_Token=****************\n' | sudo tee /etc/cortexdev/acme.env >/dev/null
 # Si la detección automática de zona falla, añade también:
 #   CF_Account_ID=<account_id>
 sudo chmod 600 /etc/cortexdev/acme.env
