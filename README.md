@@ -22,6 +22,7 @@ systemd/acme-renew.service.template
 systemd/acme-renew.timer
 scripts/install-certs.sh
 scripts/install-win-cert.sh        # cert *.cortexdev.win: provisional / emision Let's Encrypt
+scripts/add-app-win-vhost.sh       # en ubuntu-docker: añade un vhost proxy *.cortexdev.win
 scripts/acme-renew.sh              # renovacion periodica (acme.sh --cron) para systemd
 scripts/dns-overrides.sh           # overrides DNS de la capa de acceso en Pi-hole (idempotente)
 scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole (acceso remoto .lan/.win)
@@ -287,10 +288,10 @@ renovado allí** con `~/.acme.sh` (crontab 0/6/12/18). Es independiente de la ca
 - `backend/catalog.yml` y los enlaces del portal usan `.win`. `backend/app/probe.py` combina las
   CAs del sistema (valida Let's Encrypt) con la CA mkcert, para que convivan `.win` y `.lan`.
 - `pma` (phpMyAdmin) es la única excepción: aún no tiene vhost `.win` en `nginx_web`, así que el
-  catálogo apunta a `pma.cortexdev.lan`. Para pasarlo a `.win`: crear
-  `/home/christian/dev/nginx/conf.d/pma.conf` (copia del bloque `.lan` de `cortexdev-lan.conf` con
-  `server_name pma.cortexdev.win` y el par de certs `.win`), recargar `nginx_web` y quitar el
-  `TODO` de `backend/catalog.yml`.
+  catálogo apunta a `pma.cortexdev.lan`. Para pasarlo a `.win`, en `ubuntu-docker`:
+  `scripts/add-app-win-vhost.sh` (atajo pma → `http://phpmyadmin:80`; genérico
+  `<host>.cortexdev.win <proxy_pass>`). Escribe el vhost con el cert `.win`, valida, recarga y
+  verifica; después quitar el `TODO` de `backend/catalog.yml`.
 - `.lan` sigue como respaldo en las apps (catch-all `cortexdev-lan.conf`). Si una app fija
   `APP_URL`/cookies a `.lan`, el login puede quedar mixto hasta ajustarlo en la app.
 

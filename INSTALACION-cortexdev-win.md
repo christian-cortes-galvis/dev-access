@@ -318,11 +318,27 @@ a `.win`. La capa de acceso (`.49`) tiene su propio comodín y timer, independie
 Solo falta `pma` (phpMyAdmin): no tiene vhost `.win` y por eso el catálogo apunta a
 `pma.cortexdev.lan`.
 
-### 11.1 Crear `pma.cortexdev.win` en `nginx_web` (manual)
+### 11.1 Crear `pma.cortexdev.win` en `nginx_web`
 
-En `ubuntu-docker` (`ssh christian@192.168.0.87`), crear
-`/home/christian/dev/nginx/conf.d/pma.conf` copiando el bloque `.lan` de `cortexdev-lan.conf`
-y adaptándolo:
+Desde `ubuntu-docker` (donde también está el repo `cortexdev-access`):
+
+```bash
+cd ~/cortexdev-access
+scripts/add-app-win-vhost.sh            # atajo: pma.cortexdev.win -> http://phpmyadmin:80
+# genérico para cualquier proxy:
+# scripts/add-app-win-vhost.sh <host>.cortexdev.win http://<upstream>:<puerto>
+```
+
+El script escribe `~/dev/nginx/conf.d/pma.conf` con el par de certs `.win`, valida con `nginx -t`,
+recarga `nginx_web` y verifica `https://pma.cortexdev.win/` por loopback. Hace backup si el archivo
+existe y exige `FORCE=1` para sobrescribirlo. Ajustes por variables:
+`APPS_NGINX_CONF_DIR` (default `/home/christian/dev/nginx/conf.d`), `NGINX_CONTAINER` (default
+`nginx_web`), `WIN_CERT`/`WIN_KEY`.
+
+<details>
+<summary>Equivalente manual (sin el script)</summary>
+
+Crear `/home/christian/dev/nginx/conf.d/pma.conf`:
 
 ```nginx
 server {
@@ -344,12 +360,12 @@ server {
 }
 ```
 
-Validar y recargar:
-
 ```bash
 docker exec nginx_web nginx -t && docker exec nginx_web nginx -s reload
 curl -sSI https://pma.cortexdev.win/    # != 502
 ```
+
+</details>
 
 ### 11.2 Pasar `pma` a `.win` en el catálogo
 
