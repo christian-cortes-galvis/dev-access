@@ -11,7 +11,7 @@ settings:
 categories:
   - slug: infraestructura
     title: Infraestructura
-    description: Portainer, Proxmox VE, Proxmox Backup Server, Pi-hole, Uptime Kuma y Netdata (uno por servidor).
+    description: Portainer, Proxmox VE, Proxmox Backup Server, Pi-hole, Uptime Kuma, Grafana y Netdata (uno por servidor).
     url: /infraestructura.html
     note_header: Destino
     count_label: servicios
@@ -80,6 +80,16 @@ services:
     badge: false
     note: '192.168.0.49:3001 &rarr; <code>/dashboard</code> &middot; alias <a href="https://kuma.cortexdev.win" target="_blank" rel="noopener">kuma</a>'
     sort: 50
+  - slug: grafana
+    name: Grafana
+    category: infraestructura
+    url: https://grafana.cortexdev.win
+    probe_url: https://grafana.cortexdev.win/api/health
+    accept: [200]
+    tech: [grafana]
+    badge: false
+    note: "192.168.0.49:3000 &rarr; dashboards (Netdata/Prometheus)"
+    sort: 55
   - slug: netdata-backups
     name: "Netdata · proxmox-backups"
     category: infraestructura

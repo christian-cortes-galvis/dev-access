@@ -39,7 +39,7 @@ if [ -f "$win_cert" ]; then
 fi
 
 info "Contenedores"
-for c in access_nginx portal_api; do
+for c in access_nginx portal_api prometheus grafana; do
   status="$(docker inspect --format '{{.State.Status}}' "$c" 2>/dev/null || true)"
   if [ "$status" = "running" ]; then
     ok "$c running"
@@ -83,6 +83,60 @@ if [ "$c" = "200" ]; then
   ok "index.cortexdev.win /laravel.html -> 200"
 else
   bad "index.cortexdev.win /laravel.html -> ${c:-000}"
+fi
+
+c="$(code grafana.cortexdev.win /login)"
+if [ "$c" = "200" ]; then
+  ok "grafana.cortexdev.win /login -> 200"
+elif [ "$c" = "404" ]; then
+  bad "grafana.cortexdev.win /login -> 404 (nginx no ha recargado: docker exec access_nginx nginx -s reload)"
+else
+  bad "grafana.cortexdev.win /login -> ${c:-000} (docker compose logs --tail 40 grafana)"
+fi
+
+info "Monitoring (Prometheus/Grafana, loopback)"
+
+# Tras 'docker compose up' Grafana migra la BD y Prometheus hace su primer
+# scrape pasados hasta 30s; reintenta antes de dar FAIL.
+http_code() {
+  local url="$1" out=""
+  for _ in 1 2 3 4 5; do
+    out="$(curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || true)"
+    [ "$out" = "200" ] && break
+    sleep 3
+  done
+  printf '%s' "$out"
+}
+
+c="$(http_code http://127.0.0.1:9090/-/ready)"
+if [ "$c" = "200" ]; then
+  ok "Prometheus /-/ready -> 200"
+else
+  bad "Prometheus /-/ready -> ${c:-000}"
+fi
+
+c="$(http_code http://127.0.0.1:3000/api/health)"
+if [ "$c" = "200" ]; then
+  ok "Grafana /api/health -> 200"
+else
+  bad "Grafana /api/health -> ${c:-000}"
+fi
+
+if command -v jq >/dev/null; then
+  n=0
+  total=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    targets="$(curl -s 'http://127.0.0.1:9090/api/v1/targets?state=active' 2>/dev/null || true)"
+    total="$(printf '%s' "$targets" | grep -o '"scrapePool":"netdata"' | wc -l)"
+    n="$(printf '%s' "$targets" | grep -o '"health":"up"' | wc -l)"
+    [ "$total" -ge 1 ] && [ "$n" -eq "$total" ] && break
+    sleep 3
+  done
+  if [ "$total" -ge 1 ] && [ "$n" -eq "$total" ]; then
+    ok "Prometheus targets up: $n/$total"
+  else
+    bad "Prometheus targets up: $n/$total (los Netdata deben exponer :19999; scripts/diagnose-host.sh <ip> 19999)"
+  fi
 fi
 
 # Apps de ubuntu-docker (192.168.0.87): el certificado lo sirve nginx_web.
@@ -129,7 +183,7 @@ dig_answer() {
 
 info "DNS (Pi-hole local, solo .win)"
 if command -v dig >/dev/null; then
-  for h in index pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
+  for h in index pihole proxmox backups pbs uptime kuma grafana netdata-services netdata-backups netdata-proxmox netdata-docker; do
     r="$(dig_answer "$h.cortexdev.win")"
     if [ "$r" = "192.168.0.49" ]; then
       ok "$h.cortexdev.win -> 192.168.0.49"
@@ -175,7 +229,7 @@ fi
 
 info "Puertos"
 if command -v ss >/dev/null; then
-  for p in 80 443 8080 8443 8088; do
+  for p in 80 443 8080 8443 8088 3000 9090; do
     if ss -ltn 2>/dev/null | grep -q ":$p "; then
       ok "puerto $p escuchando"
     else

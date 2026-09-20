@@ -18,7 +18,7 @@ set -uo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ACCESS_IP="${ACCESS_IP:-192.168.0.49}"
 APPS_IP="${APPS_IP:-192.168.0.87}"
-HOSTS="${HOSTS:-index pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker}"
+HOSTS="${HOSTS:-index pihole proxmox backups pbs uptime kuma grafana netdata-services netdata-backups netdata-proxmox netdata-docker}"
 PUB_DOMAIN="cortexdev.win"
 WILDCARD_PUB="address=/${PUB_DOMAIN}/${APPS_IP}"
 

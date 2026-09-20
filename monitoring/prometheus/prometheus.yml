@@ -1,0 +1,32 @@
+# Prometheus de la capa de acceso (ubuntu-services, 192.168.0.49).
+# Scrapea el endpoint Prometheus que ya expone Netdata en cada host: no se
+# instalan agentes nuevos. Los jobs se distinguen por la etiqueta `host`.
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: netdata
+    metrics_path: /api/v1/allmetrics
+    honor_labels: true
+    params:
+      # average = gauges en las unidades del dashboard (nombre con unidades).
+      format: [prometheus]
+      source: [average]
+    static_configs:
+      - targets: ["192.168.0.49:19999"]
+        labels:
+          host: ubuntu-services
+      - targets: ["192.168.0.87:19999"]
+        labels:
+          host: ubuntu-docker
+      - targets: ["192.168.0.224:19999"]
+        labels:
+          host: proxmox-ve
+      - targets: ["192.168.0.166:19999"]
+        labels:
+          host: proxmox-backups

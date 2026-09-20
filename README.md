@@ -1,7 +1,7 @@
 # cortexdev-access
 
 Capa de acceso de la infraestructura `*.cortexdev.win`: portal/índice y dashboards de
-infraestructura (Pi-hole, Proxmox, PBS, Uptime/Kuma, Netdata). Vive en **ubuntu-services**
+infraestructura (Pi-hole, Proxmox, PBS, Uptime/Kuma, Netdata y Grafana). Vive en **ubuntu-services**
 (192.168.0.49), que está siempre encendida, para que reiniciar `ubuntu-docker` (192.168.0.87,
 donde corren las apps) no deje sin portal ni DNS.
 
@@ -13,11 +13,14 @@ donde corren las apps) no deje sin portal ni DNS.
 docker-compose.yml                 # nginx:stable + portal-api, network_mode host
 nginx/conf.d/
   index.conf                       # index.cortexdev.win  → portal/ + /api/
-  infra.conf                       # pihole, proxmox, backups/pbs, uptime/kuma, netdata-*
+  infra.conf                       # pihole, proxmox, backups/pbs, uptime/kuma, grafana, netdata-*
   snippets/                        # cuerpos compartidos y par TLS (tls-win.conf)
 portal/                            # portal (shells HTML + render.js, favicons, iconos)
 backend/                           # portal-api: FastAPI + SQLite (catalogo y estado)
 backend/catalog.yml                # catalogo de servicios (fuente de verdad, se edita aqui)
+monitoring/prometheus/             # prometheus.yml + reglas de alertas (Netdata)
+monitoring/grafana/                # provisioning (datasource + dashboards) y el dashboard
+.env.example                       # plantilla de credenciales de Grafana (.env gitignored)
 certs/                             # gitignored; wildcard *.cortexdev.win
 systemd/access-ingress.service.template
 systemd/acme-renew.service.template
@@ -126,6 +129,7 @@ address=/backups.cortexdev.win/192.168.0.49
 address=/pbs.cortexdev.win/192.168.0.49
 address=/uptime.cortexdev.win/192.168.0.49
 address=/kuma.cortexdev.win/192.168.0.49
+address=/grafana.cortexdev.win/192.168.0.49
 address=/netdata-services.cortexdev.win/192.168.0.49
 address=/netdata-backups.cortexdev.win/192.168.0.49
 address=/netdata-proxmox.cortexdev.win/192.168.0.49
@@ -278,6 +282,45 @@ guarda el catálogo de servicios y comprueba su estado.
 
 Variables de `portal_api` (compose): `DB_PATH`, `CATALOG_PATH`, `POLL_INTERVAL`, `PROBE_TIMEOUT`,
 `RETENTION_DAYS`. La verificación TLS usa las CAs del sistema (Let's Encrypt).
+
+## Grafana (métricas de los 4 servidores)
+
+Grafana central en ubuntu-services muestra CPU/RAM/disco/red/carga/uptime de los 4 servidores,
+reutilizando el **Netdata que ya corre en cada host** (no se instalan agentes nuevos):
+
+```
+navegador → https://grafana.cortexdev.win (nginx .49:443)
+          → Grafana 127.0.0.1:3000 → Prometheus 127.0.0.1:9090
+          → scrape http://<host>:19999/api/v1/allmetrics (Netdata)
+```
+
+- Hosts: `ubuntu-services` .49, `ubuntu-docker` .87, `proxmox-ve` .224, `proxmox-backups` .166.
+- Prometheus y Grafana usan `network_mode: host` y bindean solo a `127.0.0.1` (3000/9090); se
+  acceden por HTTPS a través de `grafana.cortexdev.win`.
+- Credenciales: `.env` (gitignored). `scripts/deploy.sh` y `scripts/setup-services.sh` lo crean a
+  partir de `.env.example` con una clave aleatoria si no existe (usuario por defecto `admin`).
+- Retención de Prometheus: 30d. Volúmenes nombrados `prometheus_data` y `grafana_data`.
+- Si añades/cambias `server` blocks (p. ej. `grafana.cortexdev.win`), `docker compose up -d` no
+  recarga nginx: ejecuta `docker exec access_nginx nginx -s reload` o usa `scripts/deploy.sh`.
+
+Personalizar:
+
+- Añadir/quitar servidores: editar `monitoring/prometheus/prometheus.yml` (`static_configs`) y
+  `docker compose up -d prometheus` (o recargar con `curl -X POST http://127.0.0.1:9090/-/reload`).
+- Dashboard: `monitoring/grafana/dashboards/cortexdev-servers.json` (provisionado, se recarga solo).
+- Alertas: `monitoring/prometheus/rules/nodes.yml` (CPU y raíz), visibles en `/alerts`. No hay
+  Alertmanager.
+
+Verificar:
+
+```bash
+curl -fsS http://127.0.0.1:9090/-/ready
+curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS http://127.0.0.1:9090/api/v1/targets | jq -r '.data.activeTargets[] | "\(.labels.host) \(.health)"'
+```
+
+Si algún target sale `down`, el Netdata de ese host no expone `:19999` desde .49
+(`scripts/diagnose-host.sh <ip> 19999`).
 
 ## Seguridad
 

@@ -1,0 +1,32 @@
+# Alertas de recursos por host, basadas en metricas de Netdata (source=average).
+# Netdata pone las unidades en el nombre y estas cambian entre versiones (p. ej.
+# netdata_system_ram_MiB_average, netdata_disk_space_GiB_average), por eso se
+# selecciona por regex __name__ en lugar de un nombre fijo.
+#
+# No hay alerta de RAM por defecto: en Proxmox con ZFS el ARC se cuenta como
+# "used" y el host vive por encima del 90% sin estar en apuros. Para anadir una
+# haria falta una metrica que descuente ARC (p. ej. mem.available si aplica).
+groups:
+  - name: nodes
+    rules:
+      - alert: node_high_cpu_usage_70
+        expr: >
+          100 - avg by (host) ({__name__=~"netdata_system_cpu_percentage_.*", dimension="idle"}) > 70
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU alta en {{ $labels.host }}"
+          description: "{{ $labels.host }} lleva 5m con CPU > 70% ({{ printf \"%.1f\" $value }}%)."
+
+      - alert: node_low_root_filesystem_space_15
+        expr: >
+          100 * sum by (host) ({__name__=~"netdata_disk_space_.*", family="/", dimension="used"})
+          / (sum by (host) ({__name__=~"netdata_disk_space_.*", family="/", dimension="used"})
+             + sum by (host) ({__name__=~"netdata_disk_space_.*", family="/", dimension="avail"})) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Poco espacio en / de {{ $labels.host }}"
+          description: "{{ $labels.host }} lleva 10m con / > 85% usado ({{ printf \"%.1f\" $value }}%)."
