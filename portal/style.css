@@ -34,6 +34,7 @@ html[data-theme="dark"] {
   /* mapeo a Bootstrap: los componentes heredan la paleta de marca */
   --bs-body-bg: var(--bg);
   --bs-body-color: var(--text);
+  --bs-body-color-rgb: 232, 238, 248;
   --bs-secondary-color: var(--muted);
   --bs-secondary-bg: var(--bg-soft);
   --bs-tertiary-bg: var(--card);
@@ -46,7 +47,9 @@ html[data-theme="dark"] {
   --bs-warning: var(--warn);
   --bs-danger: var(--err);
   --bs-link-color: var(--accent);
+  --bs-link-color-rgb: 56, 189, 248;
   --bs-link-hover-color: var(--accent-2);
+  --bs-link-hover-color-rgb: 129, 140, 248;
   --bs-emphasis-color: var(--text);
   --bs-heading-color: var(--text);
 }
@@ -77,6 +80,9 @@ html[data-theme="light"] {
 
   /* el resto de --bs-* referencia las variables de arriba y se recalcula solo */
   --bs-primary-rgb: 2, 132, 199;
+  --bs-body-color-rgb: 15, 26, 43;
+  --bs-link-color-rgb: 2, 132, 199;
+  --bs-link-hover-color-rgb: 99, 102, 241;
 }
 
 /* -------------------------------- 2. Base -------------------------------- */
@@ -92,7 +98,8 @@ body {
   transition: background-color .15s ease, color .15s ease;
 }
 
-a:hover { text-decoration: underline; }
+a { color: var(--bs-link-color); text-decoration: none; }
+a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
 
 code {
   overflow-wrap: anywhere;
@@ -133,6 +140,7 @@ code {
   color: var(--bs-body-color);
   border-radius: 999px;
   padding: .375rem .75rem;
+  text-decoration: none;
 }
 
 .crumbs .nav-link:hover { border-color: var(--bs-primary); }
@@ -147,6 +155,8 @@ code {
 a.card {
   background: linear-gradient(180deg, var(--card), var(--bg-soft));
   border-radius: 13px;
+  color: var(--bs-body-color);
+  text-decoration: none;
   transition: transform .12s ease, border-color .12s ease, background .12s ease;
 }
 
@@ -154,6 +164,8 @@ a.card:hover {
   transform: translateY(-2px);
   border-color: var(--bs-primary);
   background: var(--card-hover);
+  color: var(--bs-body-color);
+  text-decoration: none;
 }
 
 .card .card-body { padding: 12px 14px 11px; }
