@@ -10,3 +10,10 @@ backend/data/
 __pycache__/
 *.pyc
 .kilo
+
+# backupcsr: secretos y llaves locales (nunca versionar; solo los .example).
+backupcsr/conf/*.env
+backupcsr/conf/*.creds
+backupcsr/conf/fstab.backupcsr
+backupcsr/keys/
+*.ppk

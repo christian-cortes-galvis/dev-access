@@ -35,6 +35,7 @@ scripts/tailscale-dns.sh           # verifica split DNS Tailscale + Pi-hole
 scripts/deploy.sh
 scripts/check.sh
 scripts/setup-services.sh
+backupcsr/                         # copias de seguridad (cron) ejecutadas en esta maquina
 INSTALACION-cortexdev-win.md       # runbook paso a paso: Cloudflare, emision, DNS y Tailscale
 ```
 
@@ -278,6 +279,20 @@ guarda el catálogo de servicios y comprueba su estado.
 
 Variables de `portal_api` (compose): `DB_PATH`, `CATALOG_PATH`, `POLL_INTERVAL`, `PROBE_TIMEOUT`,
 `RETENTION_DAYS`. La verificación TLS usa las CAs del sistema (Let's Encrypt).
+
+## Copias de seguridad (`backupcsr/`)
+
+Las copias se ejecutan en **esta máquina** (`ubuntu-services`), no en `ubuntu-docker`: cada job
+espeja un origen remoto (FTP/SFTP) directo a `/mnt/nas` (NAS `//192.168.0.179/Backups`).
+
+```bash
+sudo backupcsr/install.sh       # instala /opt/backupcsr, /etc/backupcsr, cron, logrotate y el NAS
+sudo validar-copias             # 0=OK, 1=advertencias, 2=errores
+```
+
+`scripts/setup-services.sh` puede instalarlo con `INSTALL_BACKUPCSR=1`. Detalle (jobs, horarios,
+secretos y corte desde `ubuntu-docker`) en [`backupcsr/README.md`](backupcsr/README.md).
+`backups.cortexdev.win` sigue siendo el Proxmox Backup Server; son cosas distintas.
 
 ## Seguridad
 

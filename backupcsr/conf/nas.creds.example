@@ -1,0 +1,7 @@
+# Credenciales CIFS para el share //192.168.0.179/Backups
+# Copiar a /etc/backupcsr/nas.creds, completar y aplicar:
+#   chown root:root /etc/backupcsr/nas.creds
+#   chmod 600 /etc/backupcsr/nas.creds
+username=CAMBIAR_USUARIO
+password=CAMBIAR_CLAVE
+#domain=WORKGROUP

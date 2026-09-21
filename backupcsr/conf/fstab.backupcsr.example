@@ -1,0 +1,9 @@
+# Entrada para /etc/fstab: NAS del respaldo de Ruta56/Gastro/Enter/Ticware.
+# El share es \\192.168.0.179\Backups y se monta en /mnt/nas.
+#
+# Notas:
+#  - Se usa la IP del NAS (192.168.0.179) para no depender de DNS/hostname.
+#  - Ajustar uid/gid al usuario que ejecuta los jobs (por defecto root).
+#  - Si el montaje falla, probar vers=3.1.1 y luego vers=2.1.
+#
+# //192.168.0.179/Backups  /mnt/nas  cifs  credentials=/etc/backupcsr/nas.creds,vers=3.0,uid=root,gid=root,file_mode=0660,dir_mode=0770,iocharset=utf8,_netdev,nofail,x-systemd.automount  0  0

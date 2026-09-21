@@ -7,6 +7,7 @@
 #   PIHOLE      nombre del contenedor de Pi-hole (autodetectado si se omite)
 #   PORT_HTTP   puerto host para HTTP  (default: 8080)
 #   PORT_HTTPS  puerto host para HTTPS (default: 8443)
+#   INSTALL_BACKUPCSR=1  instala backupcsr/install.sh al final (copias de seguridad)
 #
 set -uo pipefail
 
@@ -159,6 +160,16 @@ fi
 
 if [ -x scripts/check.sh ]; then
   scripts/check.sh || true
+fi
+
+# Copias de seguridad (opt-in): requieren secretos y llaves ya colocados.
+if [ -x backupcsr/install.sh ] && [ "${INSTALL_BACKUPCSR:-0}" = "1" ]; then
+  info "backupcsr (copias de seguridad)"
+  if sudo backupcsr/install.sh; then
+    ok "backupcsr instalado (sudo validar-copias)"
+  else
+    bad "backupcsr/install.sh fallo"
+  fi
 fi
 
 echo
