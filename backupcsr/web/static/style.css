@@ -1,0 +1,155 @@
+/* Portal de copias (copias.cortexdev.win) — tema Bootstrap 5.3 con paleta CortexDev. */
+:root,
+html[data-theme="dark"] {
+  --bg: #05070c;
+  --bg-soft: #0a0f18;
+  --card: #0e1523;
+  --card-hover: #141d2e;
+  --border: #1e2a3f;
+  --text: #e8eef8;
+  --muted: #8b9bb5;
+  --accent: #38bdf8;
+  --accent-2: #818cf8;
+  --ok: #22c55e;
+  --login: #60a5fa;
+  --warn: #f59e0b;
+  --err: #ef4444;
+  --th-bg: rgba(255, 255, 255, .03);
+  --accent-soft: rgba(56, 189, 248, .12);
+  --glow: rgba(56, 189, 248, .22);
+  --badge-fg: #f8fbff;
+  --notice-border: rgba(56, 189, 248, .35);
+  --notice-bg: rgba(56, 189, 248, .08);
+  --body-glow-1: #0e1a33;
+  --body-glow-2: #161334;
+  color-scheme: dark;
+
+  --bs-body-bg: var(--bg);
+  --bs-body-color: var(--text);
+  --bs-body-color-rgb: 232, 238, 248;
+  --bs-secondary-color: var(--muted);
+  --bs-secondary-bg: var(--bg-soft);
+  --bs-tertiary-bg: var(--card);
+  --bs-border-color: var(--border);
+  --bs-card-bg: var(--card);
+  --bs-card-border-color: var(--border);
+  --bs-primary: var(--accent);
+  --bs-primary-rgb: 56, 189, 248;
+  --bs-success: var(--ok);
+  --bs-warning: var(--warn);
+  --bs-danger: var(--err);
+  --bs-link-color: var(--accent);
+  --bs-link-color-rgb: 56, 189, 248;
+  --bs-link-hover-color: var(--accent-2);
+  --bs-link-hover-color-rgb: 129, 140, 248;
+  --bs-emphasis-color: var(--text);
+  --bs-heading-color: var(--text);
+}
+
+html[data-theme="light"] {
+  --bg: #f6f8fc;
+  --bg-soft: #ffffff;
+  --card: #ffffff;
+  --card-hover: #eef3fa;
+  --border: #d9e1ee;
+  --text: #0f1a2b;
+  --muted: #5b6b83;
+  --accent: #0284c7;
+  --accent-2: #6366f1;
+  --ok: #15803d;
+  --login: #1d4ed8;
+  --warn: #b45309;
+  --err: #dc2626;
+  --th-bg: rgba(0, 0, 0, .03);
+  --accent-soft: rgba(2, 132, 199, .10);
+  --glow: rgba(2, 132, 199, .18);
+  --badge-fg: #ffffff;
+  --notice-border: rgba(2, 132, 199, .30);
+  --notice-bg: rgba(2, 132, 199, .06);
+  --body-glow-1: #e2ecfb;
+  --body-glow-2: #eae7fb;
+  color-scheme: light;
+  --bs-primary-rgb: 2, 132, 199;
+  --bs-body-color-rgb: 15, 26, 43;
+  --bs-link-color-rgb: 2, 132, 199;
+  --bs-link-hover-color-rgb: 99, 102, 241;
+}
+
+body {
+  background:
+    radial-gradient(1100px 500px at 15% -10%, var(--body-glow-1) 0%, transparent 60%),
+    radial-gradient(900px 450px at 85% 0%, var(--body-glow-2) 0%, transparent 55%),
+    var(--bg);
+  color: var(--bs-body-color);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+}
+
+a { color: var(--bs-link-color); text-decoration: none; }
+a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 18px 60px; }
+
+.brand .logo {
+  flex: 0 0 auto;
+  width: 42px; height: 42px;
+  border-radius: 12px; overflow: hidden;
+  display: grid; place-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--bs-border-color);
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.nav-tabs .nav-link { color: var(--bs-body-color); }
+.nav-tabs .nav-link.active {
+  color: var(--bs-primary);
+  background: var(--bg-soft);
+  border-color: var(--bs-border-color) var(--bs-border-color) var(--bg-soft);
+}
+
+.table { --bs-table-bg: transparent; --bs-table-color: var(--bs-body-color);
+  --bs-table-border-color: var(--bs-border-color); --bs-table-hover-bg: var(--notice-bg);
+  --bs-table-hover-color: var(--bs-body-color); }
+.table thead th {
+  background: var(--th-bg); font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--muted);
+}
+.card { background: linear-gradient(180deg, var(--card), var(--bg-soft)); }
+
+.badge.rounded-pill { padding: 3px 10px; font-size: 12px; }
+.pill-ok      { color: var(--ok);    background: rgba(34, 197, 94, .12);   border: 1px solid rgba(34, 197, 94, .35); }
+.pill-login   { color: var(--login); background: rgba(96, 165, 250, .12);  border: 1px solid rgba(96, 165, 250, .35); }
+.pill-warn    { color: var(--warn);  background: rgba(245, 158, 11, .12);  border: 1px solid rgba(245, 158, 11, .35); }
+.pill-err     { color: var(--err);   background: rgba(239, 68, 68, .12);   border: 1px solid rgba(239, 68, 68, .35); }
+.pill-unknown { color: var(--muted); background: rgba(148, 163, 184, .12); border: 1px solid rgba(148, 163, 184, .35); }
+
+.stat .value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+.stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+
+.notice {
+  --bs-alert-bg: var(--notice-bg);
+  --bs-alert-border-color: var(--notice-border);
+  --bs-alert-color: var(--bs-body-color);
+}
+.notice strong { color: var(--bs-primary); }
+
+.theme-toggle { width: 38px; height: 38px; padding: 0; display: inline-grid; place-items: center; }
+.theme-toggle svg { width: 18px; height: 18px; display: block; }
+
+pre.log {
+  background: var(--bg); color: var(--text); border: 1px solid var(--bs-border-color);
+  border-radius: 10px; padding: 12px; max-height: 460px; overflow: auto;
+  font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word;
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.muted { color: var(--muted); }
+.breadcrumb { --bs-breadcrumb-divider-color: var(--muted); }
+.breadcrumb a { cursor: pointer; }
+.pointer { cursor: pointer; }
+
+@media (max-width: 720px) {
+  .wrap { padding: 16px 12px 44px; }
+  .table-responsive { font-size: 13px; }
+}

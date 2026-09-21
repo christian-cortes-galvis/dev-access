@@ -1,0 +1,17 @@
+[Unit]
+Description=Portal de administración de copias (backupcsr-web) en ubuntu-services
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__WEB_DIR__
+EnvironmentFile=/etc/backupcsr/web.env
+ExecStart=__WEB_DIR__/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8089
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

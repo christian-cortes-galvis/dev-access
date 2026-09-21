@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>CortexDev · Acceso a copias</title>
+	<script src="/theme.js?v=1"></script>
+	<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
+	<link rel="stylesheet" href="/style.css?v=1">
+	<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
+</head>
+
+<body>
+	<div class="wrap" style="max-width: 460px; padding-top: 9vh;">
+		<div class="text-center mb-4">
+			<div class="logo mx-auto mb-2" style="width:52px;height:52px;">BC</div>
+			<h1 class="h4 mb-0">Copias de seguridad</h1>
+			<p class="small text-body-secondary mb-0">copias.cortexdev.win</p>
+		</div>
+
+		<div class="card">
+			<div class="card-body">
+				<div id="login-error" class="alert alert-danger" hidden></div>
+				<form id="login-form">
+					<div class="mb-3">
+						<label class="form-label" for="username">Usuario</label>
+						<input class="form-control" id="username" autocomplete="username" required autofocus>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="password">Contraseña</label>
+						<input type="password" class="form-control" id="password" autocomplete="current-password" required>
+					</div>
+					<button type="submit" class="btn btn-primary w-100">Entrar</button>
+				</form>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		(function () {
+			'use strict';
+			var form = document.getElementById('login-form');
+			var errorBox = document.getElementById('login-error');
+			form.addEventListener('submit', async function (event) {
+				event.preventDefault();
+				errorBox.hidden = true;
+				try {
+					var res = await fetch('/api/auth/login', {
+						method: 'POST',
+						credentials: 'same-origin',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							username: document.getElementById('username').value,
+							password: document.getElementById('password').value
+						})
+					});
+					var text = await res.text();
+					var data = null;
+					try { data = text ? JSON.parse(text) : null; } catch (e) {}
+					if (!res.ok) {
+						throw new Error((data && data.detail) || ('HTTP ' + res.status));
+					}
+					location.href = '/';
+				} catch (err) {
+					errorBox.textContent = 'No se pudo entrar: ' + err.message;
+					errorBox.hidden = false;
+				}
+			});
+		})();
+	</script>
+</body>
+
+</html>

@@ -1,0 +1,87 @@
+# Catálogo de jobs del portal de copias (fuente de verdad de la metadata).
+#
+# El horario de aquí es el valor POR DEFECTO: al insertar un job nuevo en la tabla
+# `jobs` se copia; las ediciones posteriores del horario/enabled se conservan en la
+# BD (catalog.py nunca las pisa). Quitar un job de este archivo lo desactiva
+# (`enabled=0`) pero no borra su histórico.
+#
+# Este archivo NO ejecuta nada: los jobs reales viven en /opt/backupcsr/jobs/*.sh y
+# el horario efectivo está en /etc/cron.d/backupcsr (generado desde la BD cuando
+# BACKUP_MANAGE_CRON=1).
+settings:
+  timezone: America/Bogota
+  grace_minutes: 90
+  default_enabled: true
+
+jobs:
+  - slug: google-bd
+    name: Google BD
+    description: Copias automáticas de la BD en el VPS Google (SFTP con llave).
+    origin_type: sftp
+    source: /var/www/html/backupsAutomaticos
+    dest_rel: google/backupsAutomaticos
+    lockfile: /run/lock/backupcsr-google-bd.lock
+    cron:
+      minute: "20"
+      hour: "6-19"
+    sort: 10
+
+  - slug: latino-bd
+    name: Latino BD
+    description: Copias automáticas de Chequeos/Latino (SFTP con llave, puerto 2200).
+    origin_type: sftp
+    source: /home/chequeos/taskManager/backupsAutomaticos
+    dest_rel: latino/backupsAutomaticos
+    lockfile: /run/lock/backupcsr-latino-bd.lock
+    cron:
+      minute: "20"
+      hour: "6-19"
+    sort: 20
+
+  - slug: ruta56-bd
+    name: Ruta56 BD
+    description: Base de datos de Ruta56 (FTP). Excluye storage para no pisar ruta56-web.
+    origin_type: ftp
+    source: taskManager/ruta56
+    dest_rel: ruta56
+    lockfile: /run/lock/backupcsr-ruta56-bd.lock
+    cron:
+      minute: "20"
+      hour: "6-19"
+    sort: 30
+
+  - slug: ruta56-web
+    name: Ruta56 Web
+    description: Archivos de storage de Ruta56 (FTP); comparte árbol con ruta56-bd.
+    origin_type: ftp
+    source: ruta56/storage
+    dest_rel: ruta56/storage/app
+    lockfile: /run/lock/backupcsr-ruta56-web.lock
+    cron:
+      minute: "20"
+      hour: "6,13,19"
+    sort: 40
+
+  - slug: gastro-bd
+    name: Gastro BD
+    description: Base de datos de Gastro (FTP).
+    origin_type: ftp
+    source: taskManager/gastro
+    dest_rel: gastro
+    lockfile: /run/lock/backupcsr-gastro-bd.lock
+    cron:
+      minute: "20"
+      hour: "6-19"
+    sort: 50
+
+  - slug: enter-bd
+    name: Enter BD
+    description: Base de datos de Enter/Pedidos (FTP).
+    origin_type: ftp
+    source: taskManager/pedidos
+    dest_rel: pedidos
+    lockfile: /run/lock/backupcsr-enter-bd.lock
+    cron:
+      minute: "20"
+      hour: "6-19"
+    sort: 60

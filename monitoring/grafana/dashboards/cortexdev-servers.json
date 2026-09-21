@@ -7,7 +7,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "templating": {
@@ -269,6 +269,39 @@
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "{__name__=~\"netdata_(system_io|disk_io)_.*\", host=~\"$host\", dimension=~\"read|write\"}",
           "legendFormat": "{{host}} {{family}} {{dimension}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Temperatura CPU (sensor)",
+      "description": "Historico de la temperatura del die de la CPU desde los sensores hwmon de Netdata (drivers k10temp, coretemp, zenpower, x86_pkg_temp...). Solo publican estos sensores los hosts con hwmon accesible: actualmente proxmox-ve (k10temp / Tctl).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 30 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "{__name__=~\"netdata_system_hw_sensor_temperature_input_.*\", host=~\"$host\", dimension=\"input\", chip_id=~\".*(k10temp|coretemp|zenpower|cpu_thermal|x86_pkg_temp|soc_thermal).*\"}",
+          "legendFormat": "{{host}} {{label}}"
         }
       ]
     }

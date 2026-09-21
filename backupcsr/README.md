@@ -19,6 +19,7 @@ conf/*.example                # credenciales y fstab de referencia (los reales N
 cron/backupcsr.cron           # se instala en /etc/cron.d/backupcsr
 logrotate/backupcsr           # se instala en /etc/logrotate.d/backupcsr
 install.sh                    # instalador idempotente
+web/                          # portal web de administración (copias.cortexdev.win)
 ```
 
 Rutas en runtime: `/opt/backupcsr` (scripts), `/etc/backupcsr` (credenciales y llaves),
@@ -105,6 +106,21 @@ sudo subir-historiasclinicas
 
 Variables: `DRY_RUN`, `ONLY_MISSING` (por defecto 1), `COUNT_FILES`, `RSYNC_VERBOSE`,
 `SKIP_PREFLIGHT`, `SRC_DIR`, `DST_DIR`. Log en `/var/log/backupcsr/subir-historiasclinicas.log`.
+
+## Portal web (web/)
+
+Interfaz de administración en **https://copias.cortexdev.win** (no es `backups.cortexdev.win`,
+que es PBS): estado de los jobs, ejecución manual (real o `DRY_RUN`), historial de corridas con
+archivos, navegador de solo lectura de `/mnt/nas` y, opcionalmente, edición del horario.
+
+```bash
+sudo backupcsr/web/install.sh     # venv + deps + systemd (backupcsr-web) + schema + admin
+sudo BACKUP_MANAGE_CRON=1 ...     # fase 2: el portal reescribe /etc/cron.d/backupcsr
+```
+
+Detalle (requisitos de MySQL, fases, API, seguridad y diagnóstico) en
+[`web/README.md`](web/README.md). El backend corre nativo por systemd (127.0.0.1:8089) y usa el
+mismo `flock` que cron; `validar-copias.sh` no cambia.
 
 ## Monitoreo continuo
 

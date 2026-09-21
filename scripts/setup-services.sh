@@ -42,7 +42,7 @@ if [ "${ALLOW_OTHER_HOST:-0}" != "1" ] && ! hostname -I 2>/dev/null | grep -q '1
 fi
 
 info "1/5 Archivos y certificados"
-for p in docker-compose.yml nginx/conf.d/index.conf nginx/conf.d/infra.conf nginx/conf.d/snippets/tls-win.conf portal/index.html; do
+for p in docker-compose.yml nginx/conf.d/index.conf nginx/conf.d/infra.conf nginx/conf.d/copias.conf nginx/conf.d/snippets/tls-win.conf portal/index.html; do
   if [ -e "$p" ]; then
     ok "$p"
   else
@@ -164,7 +164,7 @@ if [ -n "$PIHOLE_KIND" ] && [ -x scripts/dns-overrides.sh ]; then
   scripts/dns-overrides.sh || true
 elif [ -n "$PIHOLE_KIND" ]; then
   bad "falta scripts/dns-overrides.sh; agrega a mano en misc.dnsmasq_lines:"
-  for h in index pihole proxmox backups pbs uptime kuma grafana netdata-services netdata-backups netdata-proxmox netdata-docker; do
+  for h in index copias pihole proxmox backups pbs uptime kuma grafana netdata-services netdata-backups netdata-proxmox netdata-docker; do
     printf '         address=/%s.cortexdev.win/192.168.0.49\n' "$h"
   done
   printf '       Conserva el wildcard: address=/cortexdev.win/192.168.0.87\n'

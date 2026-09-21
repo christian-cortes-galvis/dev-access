@@ -10,6 +10,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./certs:/etc/nginx/certs:ro
       - ./portal:/var/www/portal:ro
+      - ./backupcsr/web/static:/var/www/backupcsr:ro
 
   portal-api:
     build: ./backend

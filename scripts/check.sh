@@ -48,6 +48,13 @@ for c in access_nginx portal_api prometheus grafana; do
   fi
 done
 
+# backupcsr-web corre nativo (systemd) porque necesita root para el NAS y los jobs.
+if systemctl is-active --quiet backupcsr-web 2>/dev/null; then
+  ok "backupcsr-web active (systemd)"
+else
+  warn "backupcsr-web no está activo (backupcsr/web/install.sh; es opcional)"
+fi
+
 # HTTP contra nginx local por loopback, sin depender del DNS y sin -k (valida el cert).
 code() {
   curl -sS -o /dev/null -w '%{http_code}' --resolve "$1:443:127.0.0.1" "https://$1$2" 2>/dev/null || true
@@ -83,6 +90,21 @@ if [ "$c" = "200" ]; then
   ok "index.cortexdev.win /laravel.html -> 200"
 else
   bad "index.cortexdev.win /laravel.html -> ${c:-000}"
+fi
+
+# Portal de copias (nginx -> backupcsr-web 127.0.0.1:8089).
+c="$(code copias.cortexdev.win /)"
+if [ "$c" = "200" ]; then
+  ok "copias.cortexdev.win / -> 200"
+else
+  bad "copias.cortexdev.win / -> ${c:-000} (docker exec access_nginx nginx -s reload; systemctl status backupcsr-web)"
+fi
+
+c="$(code copias.cortexdev.win /api/health)"
+if [ "$c" = "200" ]; then
+  ok "copias.cortexdev.win /api/health -> 200"
+else
+  bad "copias.cortexdev.win /api/health -> ${c:-000} (systemctl status backupcsr-web)"
 fi
 
 c="$(code grafana.cortexdev.win /login)"
@@ -183,7 +205,7 @@ dig_answer() {
 
 info "DNS (Pi-hole local, solo .win)"
 if command -v dig >/dev/null; then
-  for h in index pihole proxmox backups pbs uptime kuma grafana netdata-services netdata-backups netdata-proxmox netdata-docker; do
+  for h in index copias pihole proxmox backups pbs uptime kuma grafana netdata-services netdata-backups netdata-proxmox netdata-docker; do
     r="$(dig_answer "$h.cortexdev.win")"
     if [ "$r" = "192.168.0.49" ]; then
       ok "$h.cortexdev.win -> 192.168.0.49"
@@ -229,7 +251,7 @@ fi
 
 info "Puertos"
 if command -v ss >/dev/null; then
-  for p in 80 443 8080 8443 8088 3000 9090; do
+  for p in 80 443 8080 8443 8088 8089 3000 9090; do
     if ss -ltn 2>/dev/null | grep -q ":$p "; then
       ok "puerto $p escuchando"
     else

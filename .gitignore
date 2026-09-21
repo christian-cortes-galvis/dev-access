@@ -20,3 +20,8 @@ backupcsr/conf/*.creds
 backupcsr/conf/fstab.backupcsr
 backupcsr/keys/
 *.ppk
+
+# Portal de copias: configuración real (web.env), nunca versionar.
+backupcsr/web/conf/*.env
+backupcsr/web/venv/
+

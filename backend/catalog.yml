@@ -90,6 +90,16 @@ services:
     badge: false
     note: "192.168.0.49:3000 &rarr; dashboards (Netdata/Prometheus)"
     sort: 55
+  - slug: copias
+    name: Copias (backupcsr)
+    category: infraestructura
+    url: https://copias.cortexdev.win
+    probe_url: https://copias.cortexdev.win/api/health
+    accept: [200]
+    tech: [server]
+    badge: false
+    note: "Portal de copias backupcsr (192.168.0.49) &middot; distinto de PBS"
+    sort: 56
   - slug: netdata-backups
     name: "Netdata · proxmox-backups"
     category: infraestructura

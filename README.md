@@ -39,6 +39,7 @@ scripts/deploy.sh
 scripts/check.sh
 scripts/setup-services.sh
 backupcsr/                         # copias de seguridad (cron) ejecutadas en esta maquina
+backupcsr/web/                     # portal de administracion (copias.cortexdev.win) + API
 INSTALACION-cortexdev-win.md       # runbook paso a paso: Cloudflare, emision, DNS y Tailscale
 ```
 
@@ -301,9 +302,22 @@ sudo validar-copias             # 0=OK, 1=advertencias, 2=errores
 `scripts/setup-services.sh` puede instalarlo con `INSTALL_BACKUPCSR=1`. Detalle (jobs, horarios,
 secretos y corte desde `ubuntu-docker`) en [`backupcsr/README.md`](backupcsr/README.md).
 `backups.cortexdev.win` sigue siendo el Proxmox Backup Server; son cosas distintas.
+
+### Portal de administración (`copias.cortexdev.win`)
+
+`backupcsr/web/` añade un portal web (Bootstrap 5) para ver el estado, ejecutar jobs, consultar el
+historial y los archivos de cada copia, y —con la gestión activada— editar el horario. La API corre
+nativa por systemd en `127.0.0.1:8089` (necesita root para el NAS/logs/jobs) y nginx la publica:
+
+```bash
+sudo backupcsr/web/install.sh     # venv, systemd, esquema y admin
+docker compose up -d --force-recreate ingress && scripts/dns-overrides.sh
+```
+
+Detalle en [`backupcsr/web/README.md`](backupcsr/web/README.md).
 ## Grafana (métricas de los 4 servidores)
 
-Grafana central en ubuntu-services muestra CPU/RAM/disco/red/carga/uptime de los 4 servidores,
+Grafana central en ubuntu-services muestra CPU/RAM/disco/red/carga/uptime y temperatura de CPU,
 reutilizando el **Netdata que ya corre en cada host** (no se instalan agentes nuevos):
 
 ```
@@ -318,6 +332,10 @@ navegador → https://grafana.cortexdev.win (nginx .49:443)
 - Credenciales: `.env` (gitignored). `scripts/deploy.sh` y `scripts/setup-services.sh` lo crean a
   partir de `.env.example` con una clave aleatoria si no existe (usuario por defecto `admin`).
 - Retención de Prometheus: 30d. Volúmenes nombrados `prometheus_data` y `grafana_data`.
+- Temperatura de CPU (panel "Temperatura CPU"): sale de los sensores `hwmon` de Netdata
+  (`netdata_system_hw_sensor_temperature_input_*`, drivers `k10temp`/`coretemp`/`zenpower`...).
+  Solo la publican los hosts con sensores accesibles: hoy únicamente `proxmox-ve` (`k10temp`,
+  `Tctl`); las VM invitadas no exponen sensor de CPU.
 - Aparece en el portal como `Grafana` (`backend/catalog.yml`, health check a `/api/health`).
 - Si añades/cambias `server` blocks (p. ej. `grafana.cortexdev.win`), `docker compose up -d` no
   recarga nginx: ejecuta `docker exec access_nginx nginx -s reload` o usa `scripts/deploy.sh`.

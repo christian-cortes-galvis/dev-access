@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>CortexDev · Copias de seguridad</title>
+	<script src="/theme.js?v=1"></script>
+	<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
+	<link rel="stylesheet" href="/style.css?v=1">
+	<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
+	<script src="/api.js?v=1" defer></script>
+	<script src="/app.js?v=1" defer></script>
+</head>
+
+<body>
+	<div class="wrap">
+
+		<header class="top d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+			<div class="brand d-flex align-items-center gap-3 min-w-0">
+				<div class="logo">BC</div>
+				<div>
+					<h1 class="h4 mb-0">Copias de seguridad</h1>
+					<p class="mb-0 small text-body-secondary">
+						Administración de <code>backupcsr</code> en ubuntu-services &middot; <code>copias.cortexdev.win</code>
+					</p>
+				</div>
+			</div>
+			<div class="d-flex align-items-center gap-2">
+				<span id="user-name" class="small text-body-secondary"></span>
+				<button id="theme-toggle" type="button" class="btn btn-outline-secondary rounded-circle theme-toggle"></button>
+				<button id="logout-btn" type="button" class="btn btn-sm btn-outline-secondary">Salir</button>
+			</div>
+		</header>
+
+		<ul class="nav nav-tabs mb-3" id="main-tabs">
+			<li class="nav-item"><button class="nav-link active" type="button" data-tab="dashboard">Panel</button></li>
+			<li class="nav-item"><button class="nav-link" type="button" data-tab="historial">Historial</button></li>
+			<li class="nav-item"><button class="nav-link" type="button" data-tab="archivos">Archivos</button></li>
+			<li class="nav-item"><button class="nav-link" type="button" data-tab="cron">Programación</button></li>
+		</ul>
+
+		<div id="banner" class="alert alert-warning banner" hidden></div>
+
+		<!-- ------------------------------ Panel ------------------------------ -->
+		<section id="tab-dashboard">
+			<div class="row row-cols-2 row-cols-md-3 row-cols-lg-6 g-3 mb-4" id="stats"></div>
+
+			<div class="d-flex align-items-center justify-content-between mb-2">
+				<h2 class="h5 mb-0">Copias programadas</h2>
+				<button id="jobs-refresh" type="button" class="btn btn-sm btn-outline-secondary">Actualizar</button>
+			</div>
+			<div class="table-responsive">
+				<table class="table table-hover align-middle">
+					<thead>
+						<tr>
+							<th>Job</th>
+							<th>Estado</th>
+							<th>Última</th>
+							<th>Próxima</th>
+							<th>Destino</th>
+							<th>Programación</th>
+							<th>Acciones</th>
+						</tr>
+					</thead>
+					<tbody id="jobs-body"></tbody>
+				</table>
+			</div>
+		</section>
+
+		<!-- ---------------------------- Historial ---------------------------- -->
+		<section id="tab-historial" hidden>
+			<form id="hist-filter" class="row g-2 align-items-end mb-3">
+				<div class="col-auto">
+					<label class="form-label small mb-1" for="hist-job">Job</label>
+					<select id="hist-job" class="form-select form-select-sm">
+						<option value="">Todos</option>
+					</select>
+				</div>
+				<div class="col-auto">
+					<label class="form-label small mb-1" for="hist-status">Estado</label>
+					<select id="hist-status" class="form-select form-select-sm">
+						<option value="">Todos</option>
+						<option value="OK">OK</option>
+						<option value="EN_CURSO">EN CURSO</option>
+						<option value="FALLO">FALLÓ</option>
+						<option value="INCIERTO">INCIERTO</option>
+					</select>
+				</div>
+				<div class="col-auto">
+					<button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+				</div>
+				<div class="col-auto">
+					<button id="hist-refresh" type="button" class="btn btn-sm btn-outline-secondary">Actualizar</button>
+				</div>
+			</form>
+			<div class="table-responsive">
+				<table class="table table-hover align-middle">
+					<thead>
+						<tr>
+							<th>Job</th>
+							<th>Inicio</th>
+							<th>Fin</th>
+							<th>Estado</th>
+							<th>Duración</th>
+							<th>Transf. / Borrados</th>
+							<th>Modo</th>
+						</tr>
+					</thead>
+					<tbody id="hist-body"></tbody>
+				</table>
+			</div>
+			<p class="small text-body-secondary">Haz clic en una fila para ver el detalle y los archivos de esa ejecución.</p>
+		</section>
+
+		<!-- ---------------------------- Archivos ----------------------------- -->
+		<section id="tab-archivos" hidden>
+			<div class="row g-2 align-items-end mb-3">
+				<div class="col-auto">
+					<label class="form-label small mb-1" for="files-job">Job</label>
+					<select id="files-job" class="form-select form-select-sm"></select>
+				</div>
+			</div>
+			<nav class="breadcrumb mono" id="files-breadcrumb"></nav>
+			<div class="table-responsive">
+				<table class="table table-hover align-middle">
+					<thead>
+						<tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th><th>Modificado</th></tr>
+					</thead>
+					<tbody id="files-body"></tbody>
+				</table>
+			</div>
+		</section>
+
+		<!-- -------------------------- Programación --------------------------- -->
+		<section id="tab-cron" hidden>
+			<div class="card mb-3">
+				<div class="card-body">
+					<p class="mb-1">Gestión de cron: <strong id="cron-manage">—</strong></p>
+					<p class="mb-1">Archivo: <code id="cron-path">—</code></p>
+					<p class="mb-1">¿El archivo actual coincide con el render? <strong id="cron-equal">—</strong></p>
+					<p class="mb-0 small text-body-secondary">
+						Con la gestión activada, habilitar/deshabilitar o cambiar el horario reescribe
+						<code>/etc/cron.d/backupcsr</code> (con backup). Para editar, usa el botón <em>Horario</em> en el Panel.
+					</p>
+				</div>
+			</div>
+			<h3 class="h6">Diferencias</h3>
+			<pre class="log" id="cron-diff"></pre>
+			<h3 class="h6 mt-3">Render propuesto</h3>
+			<pre class="log" id="cron-render"></pre>
+		</section>
+
+	</div>
+
+	<!-- ------------------------------- Modales ------------------------------- -->
+	<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog modal-lg modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="log-title">Log</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body"><pre class="log" id="log-pre"></pre></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="jobModal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="jobModalLabel">Horario</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body">
+					<input type="hidden" id="job-slug">
+					<div class="form-check form-switch mb-3">
+						<input class="form-check-input" type="checkbox" id="job-enabled">
+						<label class="form-check-label" for="job-enabled">Habilitada</label>
+					</div>
+					<div class="row g-2">
+						<div class="col-6">
+							<label class="form-label small" for="job-minute">Minuto</label>
+							<input class="form-control mono" id="job-minute" placeholder="20">
+						</div>
+						<div class="col-6">
+							<label class="form-label small" for="job-hour">Hora</label>
+							<input class="form-control mono" id="job-hour" placeholder="6-19">
+						</div>
+						<div class="col-4">
+							<label class="form-label small" for="job-dom">Día mes</label>
+							<input class="form-control mono" id="job-dom" placeholder="*">
+						</div>
+						<div class="col-4">
+							<label class="form-label small" for="job-month">Mes</label>
+							<input class="form-control mono" id="job-month" placeholder="*">
+						</div>
+						<div class="col-4">
+							<label class="form-label small" for="job-dow">Día semana</label>
+							<input class="form-control mono" id="job-dow" placeholder="*">
+						</div>
+					</div>
+					<div class="alert alert-danger mt-3 mb-0" id="job-error" hidden></div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+					<button type="button" class="btn btn-primary" id="job-save">Guardar</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="runModal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog modal-lg modal-dialog-scrollable">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="run-title">Ejecución</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body" id="run-body"></div>
+			</div>
+		</div>
+	</div>
+
+</body>
+
+</html>
