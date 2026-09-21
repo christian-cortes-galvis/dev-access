@@ -300,6 +300,7 @@ navegador → https://grafana.cortexdev.win (nginx .49:443)
 - Credenciales: `.env` (gitignored). `scripts/deploy.sh` y `scripts/setup-services.sh` lo crean a
   partir de `.env.example` con una clave aleatoria si no existe (usuario por defecto `admin`).
 - Retención de Prometheus: 30d. Volúmenes nombrados `prometheus_data` y `grafana_data`.
+- Aparece en el portal como `Grafana` (`backend/catalog.yml`, health check a `/api/health`).
 - Si añades/cambias `server` blocks (p. ej. `grafana.cortexdev.win`), `docker compose up -d` no
   recarga nginx: ejecuta `docker exec access_nginx nginx -s reload` o usa `scripts/deploy.sh`.
 
