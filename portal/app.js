@@ -55,7 +55,9 @@
   var MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 
   function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    var root = document.documentElement;
+    var theme = root.getAttribute('data-bs-theme') || root.getAttribute('data-theme');
+    return theme === 'light' ? 'light' : 'dark';
   }
 
   function renderToggle(btn, theme) {
@@ -89,7 +91,8 @@
         t = t.trim();
         if (t) box.appendChild(techImg(t, 'card-icon', names[t] || t));
       });
-      card.insertBefore(box, card.firstChild);
+      var host = card.querySelector('.card-body') || card;
+      host.insertBefore(box, host.firstChild);
     });
   }
 
@@ -127,11 +130,13 @@
     if (!header || header.querySelector('.theme-toggle')) return;
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'theme-toggle';
+    btn.className = 'btn btn-outline-secondary rounded-circle theme-toggle';
     renderToggle(btn, currentTheme());
     btn.addEventListener('click', function () {
       var next = currentTheme() === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
+      var root = document.documentElement;
+      root.setAttribute('data-theme', next);
+      root.setAttribute('data-bs-theme', next);
       try { localStorage.setItem('cortexdev-theme', next); } catch (e) {}
       renderToggle(btn, next);
     });

@@ -6,37 +6,39 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>Infraestructura · cortexdev.win</title>
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicons/cortexdev-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
-<script src="/theme.js?v=1"></script>
-	<link rel="stylesheet" href="/style.css?v=2">
-	<script src="/app.js?v=2" defer></script>
-	<script src="/render.js?v=1" defer></script>
+	<link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
+	<script src="/theme.js?v=2"></script>
+	<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
+	<link rel="stylesheet" href="/style.css?v=3">
+	<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
+	<script src="/app.js?v=3" defer></script>
+	<script src="/render.js?v=3" defer></script>
 </head>
 
 <body>
 	<div class="wrap">
 
-		<header class="top">
-			<div class="brand">
+		<header class="top d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+			<div class="brand d-flex align-items-center gap-3 min-w-0">
 				<div class="logo"><img src="/favicons/cortexdev-180.png" alt="CortexDev" width="42" height="42"></div>
 				<div>
-					<h1>Infraestructura</h1>
-					<p>Servicios de la LAN expuestos vía <code>*.cortexdev.win</code></p>
+					<h1 class="h4 mb-0">Infraestructura</h1>
+					<p class="mb-0 small text-body-secondary">Servicios de la LAN expuestos vía <code>*.cortexdev.win</code></p>
 				</div>
 			</div>
-			<nav class="crumbs">
-				<a href="/">Inicio</a>
-				<a class="active" href="/infraestructura.html">Infraestructura</a>
-				<a href="/laravel.html">Laravel</a>
-				<a href="/codeigniter.html">CodeIgniter / PHP</a>
-				<a href="/spas.html">SPAs y utilidades</a>
+			<nav class="crumbs nav nav-pills flex-wrap gap-2 small">
+				<a class="nav-link" href="/">Inicio</a>
+				<a class="nav-link active" href="/infraestructura.html">Infraestructura</a>
+				<a class="nav-link" href="/laravel.html">Laravel</a>
+				<a class="nav-link" href="/codeigniter.html">CodeIgniter / PHP</a>
+				<a class="nav-link" href="/spas.html">SPAs y utilidades</a>
 			</nav>
 		</header>
 
 		<div class="section-title">Máquinas: 192.168.0.87 (docker) &middot; .49 (services) &middot; .166 (pbs) &middot; .224
 			(pve)</div>
 
-		<table class="links" data-category="infraestructura">
+		<table class="table table-hover align-middle links" data-category="infraestructura">
 			<thead>
 				<tr>
 					<th>Servicio</th>
@@ -48,7 +50,7 @@
 			<tbody></tbody>
 		</table>
 
-		<div class="legend">
+		<div class="d-flex flex-wrap gap-3 mt-4 small text-body-secondary">
 			<span><img class="tech" src="/icons/portainer.svg" alt="Portainer"> Portainer</span>
 			<span><img class="tech" src="/icons/proxmox.svg" alt="Proxmox"> Proxmox</span>
 			<span><img class="tech" src="/icons/pihole.svg" alt="Pi-hole"> Pi-hole</span>
@@ -57,14 +59,14 @@
 			<span><img class="tech" src="/icons/netdata.svg" alt="Netdata"> Netdata</span>
 		</div>
 
-		<div class="notice">
+		<div class="alert notice mt-4" role="note">
 			<strong>DNS:</strong> Pi-hole resuelve <code>address=/cortexdev.win/192.168.0.87</code>
 			(wildcard apps) y <code>address=/&lt;host&gt;.cortexdev.win/192.168.0.49</code> para la capa
 			de acceso (<code>misc.dnsmasq_lines</code>). <strong>TLS:</strong> certificado público
 			(Let's Encrypt) en <code>certs/cortexdev.win/</code>.
 		</div>
 
-		<footer class="bottom">
+		<footer class="bottom d-flex flex-wrap justify-content-between gap-2 border-top pt-3 mt-5 small text-body-secondary">
 			<span>cortexdev.win &middot; Infraestructura</span>
 			<span><a href="/">Volver al índice</a></span>
 		</footer>

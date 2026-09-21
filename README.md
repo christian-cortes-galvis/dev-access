@@ -277,6 +277,10 @@ guarda el catálogo de servicios y comprueba su estado.
   de disponibilidad 24h.
 - Frontend: `portal/render.js` pinta tablas, tarjetas y contadores desde `/api/portal` y
   refresca los pills desde `/api/status`. Si `portal_api` cae, las páginas cargan con un aviso.
+- Tema: Bootstrap 5.3.3 **vendoreado** en `portal/vendor/bootstrap/` (sin CDN ni npm; el portal
+  es autocontenido para la LAN/Tailscale). `portal/theme.js` fija `data-theme` y `data-bs-theme`
+  en `<html>` a partir de `localStorage['cortexdev-theme']` (por defecto oscuro), y `app.js`
+  inyecta el botón de tema que alterna claro/oscuro y lo persiste.
 - Añadir/editar servicios: editar `backend/catalog.yml` y ejecutar `scripts/deploy.sh`
   (idempotente). No hay que tocar los HTML.
 

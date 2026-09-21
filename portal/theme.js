@@ -4,5 +4,7 @@
     var saved = localStorage.getItem('cortexdev-theme');
     if (saved === 'light' || saved === 'dark') theme = saved;
   } catch (e) {}
-  document.documentElement.setAttribute('data-theme', theme);
+  var root = document.documentElement;
+  root.setAttribute('data-theme', theme);
+  root.setAttribute('data-bs-theme', theme);
 })();

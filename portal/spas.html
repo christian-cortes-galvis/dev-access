@@ -6,41 +6,43 @@
 <title>SPAs y utilidades · cortexdev.win</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/favicons/cortexdev-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
-<script src="/theme.js?v=1"></script>
-<link rel="stylesheet" href="/style.css?v=2">
-<script src="/app.js?v=2" defer></script>
-<script src="/render.js?v=1" defer></script>
+<script src="/theme.js?v=2"></script>
+<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
+<link rel="stylesheet" href="/style.css?v=3">
+<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
+<script src="/app.js?v=3" defer></script>
+<script src="/render.js?v=3" defer></script>
 </head>
 <body>
 <div class="wrap">
 
-  <header class="top">
-    <div class="brand">
+  <header class="top d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div class="brand d-flex align-items-center gap-3 min-w-0">
       <div class="logo"><img src="/favicons/cortexdev-180.png" alt="CortexDev" width="42" height="42"></div>
       <div>
-        <h1>SPAs y utilidades</h1>
-        <p>Angular, React, Python y herramientas de la LAN</p>
+        <h1 class="h4 mb-0">SPAs y utilidades</h1>
+        <p class="mb-0 small text-body-secondary">Angular, React, Python y herramientas de la LAN</p>
       </div>
     </div>
-    <nav class="crumbs">
-      <a href="/">Inicio</a>
-      <a href="/infraestructura.html">Infraestructura</a>
-      <a href="/laravel.html">Laravel</a>
-      <a href="/codeigniter.html">CodeIgniter / PHP</a>
-      <a class="active" href="/spas.html">SPAs y utilidades</a>
+    <nav class="crumbs nav nav-pills flex-wrap gap-2 small">
+      <a class="nav-link" href="/">Inicio</a>
+      <a class="nav-link" href="/infraestructura.html">Infraestructura</a>
+      <a class="nav-link" href="/laravel.html">Laravel</a>
+      <a class="nav-link" href="/codeigniter.html">CodeIgniter / PHP</a>
+      <a class="nav-link active" href="/spas.html">SPAs y utilidades</a>
     </nav>
   </header>
 
   <div class="section-title">Aplicaciones front-end y utilidades</div>
 
-  <table class="links" data-category="spas">
+  <table class="table table-hover align-middle links" data-category="spas">
     <thead>
       <tr><th>Proyecto</th><th>URL</th><th>Estado</th><th>Nota</th></tr>
     </thead>
     <tbody></tbody>
   </table>
 
-  <div class="legend">
+  <div class="d-flex flex-wrap gap-3 mt-4 small text-body-secondary">
     <span><img class="app-icon" src="/favicons/portal-pacientes.png" alt=""> favicon/logo real de la app</span>
     <span><img class="tech" src="/icons/angular.svg" alt="Angular"> Angular</span>
     <span><img class="tech" src="/icons/react.svg" alt="React"> React</span>
@@ -48,13 +50,13 @@
     <span><img class="tech" src="/icons/phpmyadmin.svg" alt="phpMyAdmin"> phpMyAdmin</span>
   </div>
 
-  <div class="notice">
+  <div class="alert notice mt-4" role="note">
     <strong>Nota:</strong> las apps y utilidades se sirven por <code>*.cortexdev.win</code> con
     certificado público. <code>portal-pacientes &rarr; admin-portal-pacientes</code>
     (<code>/api/</code>) también es interno.
   </div>
 
-  <footer class="bottom">
+  <footer class="bottom d-flex flex-wrap justify-content-between gap-2 border-top pt-3 mt-5 small text-body-secondary">
     <span>cortexdev.win &middot; SPAs y utilidades</span>
     <span><a href="/">Volver al índice</a></span>
   </footer>
