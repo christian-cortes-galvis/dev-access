@@ -7,6 +7,7 @@ corta por número de entradas y por tiempo devolviendo un resultado parcial.
 """
 from __future__ import annotations
 
+import fcntl
 import logging
 import os
 import threading
@@ -136,28 +137,69 @@ def current(job: dict) -> dict:
     return {**_public(cached), "cached": True, "pending": False}
 
 
+def job_running(job: dict) -> bool:
+    """¿El job tiene tomado su lockfile (lo mismo que usa cron/runner)?"""
+    path = Path(job.get("lockfile") or f"/run/lock/backupcsr-{job.get('slug')}.lock")
+    try:
+        handle = open(path, "a+")
+    except OSError:
+        return False
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        return False
+    except OSError:
+        return True
+    finally:
+        handle.close()
+
+
 def job_size(job: dict, force: bool = False) -> dict:
-    """Tamaño del job: caché si es fresco (< TTL) o recálculo bloqueante."""
+    """Tamaño del job: caché si es fresco (< TTL) o recálculo bloqueante.
+
+    Sin `force` no se recorre un árbol cuyo job está corriendo: el escaneo compite
+    por el NAS (CIFS) y por la RAM con la propia copia y era parte de lo que dejaba
+    al anfitrión sin memoria durante las corridas.
+    """
     slug = job.get("slug") or ""
     now = time.time()
     with _lock_for(slug):
         cached = _cache.get(slug)
         if cached and not force and (now - cached["_ts"]) < config.SIZE_TTL:
             return {**_public(cached), "cached": True, "pending": False}
+        if not force and job_running(job):
+            if cached:
+                return {**_public(cached), "cached": True, "pending": False}
+            return {
+                "bytes": None, "files": 0, "truncated": False, "error": None,
+                "computed_at": None, "cached": False, "pending": True,
+            }
         computed = _compute(job)
         computed["_ts"] = now
         _cache[slug] = computed
         return {**_public(computed), "cached": False, "pending": False}
 
 
+def invalidate(slug: str) -> None:
+    """Olvida el tamaño medido (tras crear, renombrar, mover o borrar archivos)."""
+    with _lock_for(slug):
+        _cache.pop(slug, None)
+
+
 def _warm_worker(jobs: list[dict], force: bool) -> None:
     global _refreshing
     try:
-        for job in jobs:
+        last = len(jobs) - 1
+        for index, job in enumerate(jobs):
             try:
+                if not force and job_running(job):
+                    log.debug("warm: %s está corriendo; se omite el escaneo", job.get("slug"))
+                    continue
                 job_size(job, force=force)
             except Exception:  # noqa: BLE001
                 log.exception("no se pudo medir el tamaño de %s", job.get("slug"))
+            if index < last and config.SIZE_WARM_PAUSE > 0:
+                time.sleep(config.SIZE_WARM_PAUSE)
     finally:
         with _refresh_lock:
             _refreshing = False

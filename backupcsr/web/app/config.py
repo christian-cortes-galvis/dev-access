@@ -64,11 +64,21 @@ GRACE_MIN = _int("BACKUP_GRACE_MIN", 90)
 MAX_RUN_FILES = _int("BACKUP_MAX_RUN_FILES", 5000)
 
 # --- Tamaños (GB por tarea) ---
-SIZE_TTL = _int("BACKUP_SIZE_TTL", 600)
+SIZE_TTL = _int("BACKUP_SIZE_TTL", 1800)
 SIZE_MAX_ENTRIES = _int("BACKUP_SIZE_MAX_ENTRIES", 500000)
 SIZE_TIMEOUT = _int("BACKUP_SIZE_TIMEOUT", 120)
+# Pausa entre jobs del refresco en segundo plano: recorrer el NAS (CIFS) de los seis
+# seguidos es carga extra para un anfitrión con poca RAM.
+SIZE_WARM_PAUSE = _int("BACKUP_SIZE_WARM_PAUSE", 2)
 NAS_MIN_FREE_PCT = _int("BACKUP_NAS_MIN_FREE_PCT", 10)
 SIZE_SNAPSHOT = _flag("BACKUP_SIZE_SNAPSHOT", "1")
+
+# --- Gestión de archivos (pestaña Archivos: borrar, renombrar, mover, subir) ---
+# Solo para administradores; se puede desactivar con BACKUP_MANAGE_FILES=0.
+MANAGE_FILES = _flag("BACKUP_MANAGE_FILES", "1")
+FILES_MAX_UPLOAD_MB = _int("BACKUP_FILES_MAX_UPLOAD_MB", 512)
+# A partir de este tamaño el portal pide escribir el nombre para confirmar el borrado.
+FILES_CONFIRM_MB = _int("BACKUP_FILES_CONFIRM_MB", 100)
 
 # --- Admin inicial ---
 ADMIN_USER = os.environ.get("BACKUP_ADMIN_USER", "admin")

@@ -8,6 +8,12 @@
 # Este archivo NO ejecuta nada: los jobs reales viven en /opt/backupcsr/jobs/*.sh y
 # el horario efectivo está en /etc/cron.d/backupcsr (generado desde la BD cuando
 # BACKUP_MANAGE_CRON=1).
+#
+# Los minutos van escalonados (2, 14, 20, 26, 38, 50) para que los seis jobs no
+# arranquen a la vez: seis mirrors simultáneos contra el NAS agotan la RAM del
+# anfitrión (4 vCPU, ~3,3 GB, swap lleno) y bloquean el resto de servicios. Con
+# BACKUP_MANAGE_CRON=1 hay que ajustar además el horario en la tabla `jobs` (panel
+# de Programación); la cola global de lib/common.sh protege en cualquier caso.
 settings:
   timezone: America/Bogota
   grace_minutes: 90
@@ -22,7 +28,7 @@ jobs:
     dest_rel: google/backupsAutomaticos
     lockfile: /run/lock/backupcsr-google-bd.lock
     cron:
-      minute: "20"
+      minute: "2"
       hour: "6-19"
     sort: 10
 
@@ -34,7 +40,7 @@ jobs:
     dest_rel: latino/backupsAutomaticos
     lockfile: /run/lock/backupcsr-latino-bd.lock
     cron:
-      minute: "20"
+      minute: "14"
       hour: "6-19"
     sort: 20
 
@@ -50,7 +56,7 @@ jobs:
     size_exclude:
       - storage
     cron:
-      minute: "20"
+      minute: "26"
       hour: "6-19"
     sort: 30
 
@@ -74,7 +80,7 @@ jobs:
     dest_rel: gastro
     lockfile: /run/lock/backupcsr-gastro-bd.lock
     cron:
-      minute: "20"
+      minute: "38"
       hour: "6-19"
     sort: 50
 
@@ -86,6 +92,6 @@ jobs:
     dest_rel: pedidos
     lockfile: /run/lock/backupcsr-enter-bd.lock
     cron:
-      minute: "20"
+      minute: "50"
       hour: "6-19"
     sort: 60

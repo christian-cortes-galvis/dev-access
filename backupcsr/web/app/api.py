@@ -9,7 +9,8 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import auth, catalog, config, cronfile, db, files, logs, runner, sizes
@@ -76,6 +77,26 @@ class PasswordIn(BaseModel):
 class SelfPasswordIn(BaseModel):
     current: str
     new: str
+
+
+class FilesMkdirIn(BaseModel):
+    path: str = ""
+    name: str
+
+
+class FilesRenameIn(BaseModel):
+    path: str
+    name: str
+
+
+class FilesMoveIn(BaseModel):
+    path: str
+    dest: str = ""
+
+
+class FilesDeleteIn(BaseModel):
+    path: str
+    confirm: str = ""
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -449,12 +470,15 @@ async def reset_schedule(slug: str, user: dict = Depends(auth.require_admin)):
 
 @router.get("/jobs/{slug}/files")
 async def job_files(slug: str, path: str = "", user: dict = Depends(auth.current_user)):
-    job = find_job(slug)
-    if not job:
-        raise HTTPException(status_code=404, detail="job no encontrado")
-    dest = (job.get("dest_rel") or "").strip("/")
-    anchor = config.NAS_MOUNT / dest if dest else config.NAS_MOUNT
-    return {"job": slug, **files.list_dir(path, anchor=anchor)}
+    job, anchor = _job_anchor(slug)
+    return {
+        "job": slug,
+        "manage": config.MANAGE_FILES,
+        "running": sizes.job_running(job),
+        "confirm_mb": config.FILES_CONFIRM_MB,
+        "max_upload_mb": config.FILES_MAX_UPLOAD_MB,
+        **files.list_dir(path, anchor=anchor),
+    }
 
 
 # ------------------------------ cron --------------------------------------
@@ -705,9 +729,126 @@ def _read_log(slug: str | None, log_path: str | None, tail: int) -> str:
 # ------------------------------ files -------------------------------------
 
 
+def _job_anchor(slug: str) -> tuple[dict, Path]:
+    """Job + carpeta ancla dentro del NAS (503 si el NAS no está montado)."""
+    job = find_job(slug)
+    if not job:
+        raise HTTPException(status_code=404, detail="job no encontrado")
+    if not files.nas_ready():
+        raise HTTPException(
+            status_code=503, detail=f"el NAS no está montado en {config.NAS_MOUNT}"
+        )
+    dest = (job.get("dest_rel") or "").strip("/")
+    return job, (config.NAS_MOUNT / dest if dest else config.NAS_MOUNT)
+
+
+def _files_writable(job: dict) -> None:
+    """Requisitos para escribir en el NAS: gestión activa, BD (auditoría) y job parado."""
+    if not config.MANAGE_FILES:
+        raise HTTPException(
+            status_code=409,
+            detail="gestión de archivos deshabilitada (BACKUP_MANAGE_FILES=0)",
+        )
+    _require_db()
+    if sizes.job_running(job):
+        raise HTTPException(
+            status_code=409,
+            detail="la tarea de copia está corriendo: la gestión se bloquea hasta que termine",
+        )
+
+
+def _files_changed(job: dict, user: dict, action: str, detail: dict) -> None:
+    """Tras una operación: el tamaño medido queda viejo y se registra la auditoría."""
+    sizes.invalidate(job["slug"])
+    audit(user["username"], action, job["slug"], detail)
+
+
 @router.get("/files")
 async def browse(path: str = "", user: dict = Depends(auth.current_user)):
     return files.list_dir(path)
+
+
+@router.get("/jobs/{slug}/files/entry")
+async def job_file_entry(slug: str, path: str = "", user: dict = Depends(auth.current_user)):
+    """Datos de una entrada (tamaño, nº de archivos si es carpeta) para confirmar."""
+    _job, anchor = _job_anchor(slug)
+    return {"job": slug, "entry": files.entry_info(path, anchor)}
+
+
+@router.get("/jobs/{slug}/files/download")
+async def job_file_download(slug: str, path: str = "", user: dict = Depends(auth.current_user)):
+    _job, anchor = _job_anchor(slug)
+    item = files.download(path, anchor)
+    audit(user["username"], "file-download", slug,
+          {"path": item["rel"], "bytes": item["bytes"]})
+    return FileResponse(item["path"], media_type="application/octet-stream",
+                        filename=item["name"])
+
+
+@router.post("/jobs/{slug}/files/mkdir")
+async def job_file_mkdir(slug: str, payload: FilesMkdirIn,
+                         user: dict = Depends(auth.require_admin)):
+    job, anchor = _job_anchor(slug)
+    _files_writable(job)
+    result = files.make_dir(payload.path, anchor, payload.name)
+    _files_changed(job, user, "file-mkdir", {"path": result["path"]})
+    return {"ok": True, **result}
+
+
+@router.post("/jobs/{slug}/files/rename")
+async def job_file_rename(slug: str, payload: FilesRenameIn,
+                          user: dict = Depends(auth.require_admin)):
+    job, anchor = _job_anchor(slug)
+    _files_writable(job)
+    result = files.rename(payload.path, anchor, payload.name)
+    _files_changed(job, user, "file-rename", {"path": payload.path, "name": payload.name})
+    return {"ok": True, **result}
+
+
+@router.post("/jobs/{slug}/files/move")
+async def job_file_move(slug: str, payload: FilesMoveIn,
+                        user: dict = Depends(auth.require_admin)):
+    job, anchor = _job_anchor(slug)
+    _files_writable(job)
+    result = files.move(payload.path, anchor, payload.dest)
+    _files_changed(job, user, "file-move", {"path": payload.path, "dest": payload.dest})
+    return {"ok": True, **result}
+
+
+@router.post("/jobs/{slug}/files/delete")
+async def job_file_delete(slug: str, payload: FilesDeleteIn,
+                          user: dict = Depends(auth.require_admin)):
+    job, anchor = _job_anchor(slug)
+    _files_writable(job)
+    result = files.delete(payload.path, anchor, payload.confirm)
+    _files_changed(job, user, "file-delete", {
+        "path": result["path"], "type": result["type"],
+        "bytes": result["bytes"], "entries": result["entries"],
+    })
+    return {"ok": True, **result}
+
+
+@router.post("/jobs/{slug}/files/upload")
+async def job_file_upload(
+    slug: str,
+    request: Request,
+    path: str = Query(""),
+    name: str = Query(...),
+    overwrite: bool = Query(False),
+    user: dict = Depends(auth.require_admin),
+):
+    """Sube un archivo con el cuerpo en crudo (sin multipart: no hace falta otra dependencia)."""
+    job, anchor = _job_anchor(slug)
+    _files_writable(job)
+    declared = int(request.headers.get("content-length") or 0)
+    if declared > max(1, config.FILES_MAX_UPLOAD_MB) * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail=f"el archivo supera el máximo de {config.FILES_MAX_UPLOAD_MB} MB",
+        )
+    result = await files.save_upload(path, anchor, name, request.stream(), overwrite=overwrite)
+    _files_changed(job, user, "file-upload", {"path": result["path"], "bytes": result["bytes"]})
+    return {"ok": True, **result}
 
 
 # ------------------------------ tamaños -----------------------------------

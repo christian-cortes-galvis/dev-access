@@ -478,6 +478,11 @@ pre.log {
 .nav-item > i { width: 17px; text-align: center; font-size: 14px; }
 .empty { text-align: center; color: var(--muted); padding: 26px 12px; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+/* Acciones por fila de la pestaña Archivos: botones compactos y sin saltos de línea. */
+.files-actions { white-space: nowrap; width: 1%; text-align: right; }
+.files-actions .btn { padding: .1rem .35rem; font-size: 12px; }
+.files-actions .btn + .btn { margin-left: .25rem; }
+.files-actions .btn:disabled { opacity: .4; }
 @media (max-width: 720px) {
   .conn-pill.hide-sm { display: none; }
   .table-responsive { font-size: 13px; }

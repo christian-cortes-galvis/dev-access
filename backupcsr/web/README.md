@@ -17,7 +17,9 @@ con `backups.cortexdev.win`/`pbs`, que es Proxmox Backup Server).
   en `jobs.yml`) para no contar dos veces el árbol compartido con `ruta56-web`.
 - **Historial**: corridas con duración, tamaño, archivos transferidos/eliminados, log, detalle y
   **export CSV/JSON** del filtro actual.
-- **Archivos**: navegador de solo lectura de `/mnt/nas` por job, con tamaño medido.
+- **Archivos**: navegador de `/mnt/nas` por job, con tamaño medido y **gestión** (admin):
+  nueva carpeta, renombrar, mover, subir, descargar y eliminar, con confirmación y auditoría.
+  Ver [Gestión de archivos](#gestión-de-archivos-pestaña-archivos).
 - **Programación**: habilitar, deshabilitar y editar el horario con **presets y previsualización**
   de las próximas 5 ejecuciones; con la gestión activa reescribe `/etc/cron.d/backupcsr`.
 - **Usuarios** (admin): alta, rol `admin`/`viewer`, activar/desactivar y reseteo de contraseña;
@@ -132,6 +134,9 @@ Todo bajo `/api/`, con sesión salvo `/api/health` y `/api/auth/login`.
 - `GET /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/log`,
   `GET /api/runs/export?format=csv|json` (filtros `job`, `status`, `desde`, `hasta`)
 - `GET /api/files`, `GET /api/jobs/{slug}/files`, `GET /api/cron`
+- `GET /api/jobs/{slug}/files/entry?path=` (datos para confirmar), `GET /api/jobs/{slug}/files/download?path=`
+- `POST /api/jobs/{slug}/files/mkdir|rename|move|delete` (admin)
+- `POST /api/jobs/{slug}/files/upload?path=&name=&overwrite=` (admin; el archivo va como **cuerpo en crudo**)
 - `GET/POST /api/users`, `PATCH /api/users/{username}`, `POST /api/users/{username}/password`
   (admin), `POST /api/auth/password` (propia)
 - `GET /api/audit` (admin)
@@ -143,6 +148,41 @@ Todo bajo `/api/`, con sesión salvo `/api/health` y `/api/auth/login`.
 entradas y timeout). El resultado se cachea `BACKUP_SIZE_TTL` y nunca bloquea la petición: si aún
 no hay medida, la API responde `pending:true` y un hilo en segundo plano (`warm`) la calcula. El
 sondeo guarda un snapshot en `size_snapshots` al cerrar cada corrida y, si falta, uno diario.
+
+### Gestión de archivos (pestaña Archivos)
+
+`app/files.py` resuelve cada ruta **por partes**: el directorio padre debe quedar dentro del ancla
+(la raíz del NAS, o el `dest_rel` del job) y el último segmento se trata como hoja **sin seguir
+enlaces**, de modo que borrar o renombrar un enlace nunca actúe sobre su destino. Navegar *a
+través* de un enlace que sale del ancla (p. ej. `enlace-a-/etc/passwd`) se rechaza con `400`.
+
+Reglas de las operaciones (todas auditadas e invalidando el tamaño medido):
+
+| Regla | Detalle |
+|-------|---------|
+| Rol | Solo `admin`; un `viewer` ve el listado y puede descargar |
+| Job en curso | `409`: si el `flock` del job está tomado, la gestión se bloquea hasta que termine |
+| Interruptor | `BACKUP_MANAGE_FILES=0` deshabilita la escritura (el listado queda de solo lectura) |
+| Base de datos | Requiere MySQL: la auditoría es obligatoria (`503` si no está) |
+| Raíz protegida | No se puede borrar, renombrar ni mover la raíz del ancla ni la del NAS |
+| Nombres | Sin `/ \ : * ? " < > \|` ni caracteres de control; no vacíos, sin espacios en los extremos, sin punto final, ni nombres reservados (`CON`, `NUL`, `COM1`…) |
+| No pisar | Crear/renombrar/mover/subir falla con `409` si el destino existe (subir admite `overwrite=1`) |
+| Borrado | Exige `confirm` igual al nombre; el portal lo pide escrito para carpetas, enlaces y archivos ≥ `BACKUP_FILES_CONFIRM_MB` |
+| Subida | Tope `BACKUP_FILES_MAX_UPLOAD_MB`; se escribe en un temporal del mismo directorio y se renombra (atómico). Usa el cuerpo en crudo, así que **no** necesita `python-multipart` |
+| Descarga | `FileResponse` en streaming; si el enlace apunta fuera del ancla, `400` |
+
+Variables en `/etc/backupcsr/web.env`:
+
+```ini
+BACKUP_MANAGE_FILES=1              # 0 = pestaña Archivos de solo lectura
+BACKUP_FILES_MAX_UPLOAD_MB=512     # tope por archivo subido
+BACKUP_FILES_CONFIRM_MB=100        # desde este tamaño hay que escribir el nombre para borrar
+```
+
+Aviso que se muestra en la propia pestaña: lo que se elimina o cambia es la **copia del NAS**; la
+próxima corrida del job volverá a bajar del origen lo que siga existiendo allí. Acciones
+registradas en la Auditoría: `file-mkdir`, `file-rename`, `file-move`, `file-delete`,
+`file-upload`, `file-download`.
 
 ## Degradación
 
@@ -157,7 +197,8 @@ sondeo guarda un snapshot en `size_snapshots` al cerrar cada corrida y, si falta
 - El servicio escucha solo en `127.0.0.1:8089`; nginx termina TLS con el comodín `*.cortexdev.win`.
 - Login con bcrypt y cookie de sesión firmada (`HttpOnly`, `Secure`, `SameSite=Lax`).
 - No hay ejecución arbitraria: solo se lanzan slugs del catálogo (`jobs.yml`).
-- NAS y logs se confinan con `realpath`; la v1 no permite descargar ni borrar desde la UI.
+- NAS y logs se confinan con `realpath`; la escritura (crear, renombrar, mover, subir, borrar) es
+  solo para `admin`, queda auditada y se bloquea mientras el job corre.
 - `backupcsr_web` con password fuerte y `GRANT` limitado a `192.168.0.49`.
 
 ## Diagnóstico
@@ -167,6 +208,9 @@ systemctl status backupcsr-web
 journalctl -u backupcsr-web -n 100
 curl -fsS http://127.0.0.1:8089/api/health | jq
 cd /opt/backupcsr/web && venv/bin/python -m app.cli status
+
+# Pruebas de la gestión de archivos (NAS temporal; no toca /mnt/nas, ni MySQL, ni /run/lock):
+cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_files_manage.py
 ```
 
 ### El Panel no lista tareas ("Sin tareas que mostrar")

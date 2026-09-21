@@ -3,6 +3,9 @@ services:
     image: nginx:stable
     container_name: access_nginx
     restart: unless-stopped
+    # Límite de memoria: este host tiene ~3,3 GB y las copias al NAS ya compiten por
+    # ella; sin tope, un contenedor puede empujar el swap al 100% y colgar el resto.
+    mem_limit: 96m
     # host network: nginx bindea 80/443 directamente y alcanza Pi-hole (8443)
     # y Netdata/Uptime por 127.0.0.1 en ubuntu-services.
     network_mode: host
@@ -17,6 +20,7 @@ services:
     image: cortexdev-portal-api:local
     container_name: portal_api
     restart: unless-stopped
+    mem_limit: 192m
     # host network + bind a 127.0.0.1: nginx lo proxifica en index.cortexdev.win/api/
     network_mode: host
     command: uvicorn app.main:app --host 127.0.0.1 --port 8088
@@ -40,6 +44,7 @@ services:
     image: prom/prometheus:v3.5.0
     container_name: prometheus
     restart: unless-stopped
+    mem_limit: 384m
     # host network: alcanza el Netdata de los 4 hosts (:19999) y bindea a 127.0.0.1
     network_mode: host
     command:
@@ -56,6 +61,7 @@ services:
     image: grafana/grafana-oss:11.4.0
     container_name: grafana
     restart: unless-stopped
+    mem_limit: 384m
     # host network + bind a 127.0.0.1: nginx lo proxifica en grafana.cortexdev.win
     network_mode: host
     depends_on:

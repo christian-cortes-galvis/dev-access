@@ -218,7 +218,6 @@ function jobRow(job) {
     el('div', { class: 'muted mono', text: job.slug + ' · ' + (job.origin_type || '') }),
   ]));
   const statusCell = el('td', {}, [pill(job.status, job.status_detail)]);
-  if (job.running) statusCell.appendChild(el('span', { class: 'ms-1 muted small', text: 'ejecutando…' }));
   tr.appendChild(statusCell);
 
   const size = job.size || {};
@@ -295,7 +294,6 @@ function updateActionbar() {
         class: 'badge rounded-pill pill-' + statusClass(job.status),
         text: statusLabel(job.status),
       }));
-      if (job.running) label.appendChild(el('span', { class: 'ms-1 muted small', text: 'ejecutando…' }));
     } else {
       label.innerHTML = '<i class="fa-solid fa-hand-pointer me-1"></i>Selecciona una fila para operar';
     }

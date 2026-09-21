@@ -225,18 +225,39 @@
 							<select id="files-job" class="form-select form-select-sm"></select>
 						</div>
 						<div class="small text-body-secondary" id="files-size">—</div>
-						<button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="files-refresh-size">
-							<i class="fa-solid fa-ruler-combined"></i><span>Medir tamaño</span></button>
+						<div class="ms-auto d-flex gap-2 flex-wrap">
+							<button type="button" class="btn btn-sm btn-outline-secondary" id="files-refresh">
+								<i class="fa-solid fa-rotate"></i><span>Actualizar</span></button>
+							<button type="button" class="btn btn-sm btn-outline-secondary" id="files-refresh-size">
+								<i class="fa-solid fa-ruler-combined"></i><span>Medir tamaño</span></button>
+							<button type="button" class="btn btn-sm btn-outline-primary" id="files-mkdir">
+								<i class="fa-solid fa-folder-plus"></i><span>Nueva carpeta</span></button>
+							<button type="button" class="btn btn-sm btn-outline-primary" id="files-upload">
+								<i class="fa-solid fa-upload"></i><span>Subir archivo</span></button>
+						</div>
+					</div>
+					<div class="alert alert-warning d-flex align-items-start gap-2 py-2 small" id="files-note" hidden>
+						<i class="fa-solid fa-triangle-exclamation mt-1"></i>
+						<div id="files-note-text"></div>
 					</div>
 					<nav class="breadcrumb mono" id="files-breadcrumb"></nav>
 					<div class="table-shell table-responsive">
 						<table class="table table-hover align-middle">
 							<thead>
-								<tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th><th>Modificado</th></tr>
+								<tr>
+									<th>Nombre</th><th>Tipo</th><th>Tamaño</th><th>Modificado</th>
+									<th id="files-actions-head">Acciones</th>
+								</tr>
 							</thead>
 							<tbody id="files-body"></tbody>
 						</table>
 					</div>
+					<p class="small text-body-secondary mt-2">
+						Las operaciones actúan sobre la <strong>copia en el NAS</strong>. La próxima corrida
+						volverá a traer del origen lo que siga existiendo allí, y todo cambio queda en la
+						<strong>Auditoría</strong>. Si un <em>job</em> está corriendo, la gestión se bloquea
+						hasta que termine.
+					</p>
 				</section>
 
 				<!-- -------------------------- Programación --------------------------- -->
@@ -485,6 +506,83 @@
 						<i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
 					<button type="button" class="btn btn-danger" id="confirm-ok">
 						<i class="fa-solid fa-check"></i><span>Confirmar</span></button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="modal fade" id="files-prompt-modal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="files-prompt-title">Operación</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body">
+					<div class="small text-body-secondary mb-2" id="files-prompt-context">—</div>
+					<label class="form-label small mb-1" for="files-prompt-input" id="files-prompt-label">Nombre</label>
+					<input type="text" class="form-control form-control-sm mono" id="files-prompt-input" autocomplete="off">
+					<div class="form-text" id="files-prompt-hint"></div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+						<i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
+					<button type="button" class="btn btn-primary" id="files-prompt-ok">
+						<i class="fa-solid fa-check"></i><span>Guardar</span></button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="files-delete-modal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Eliminar del NAS</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body">
+					<div id="files-delete-text">—</div>
+					<div class="alert alert-warning small my-2" id="files-delete-warn" hidden></div>
+					<div id="files-delete-confirm-box" hidden>
+						<label class="form-label small mb-1" for="files-delete-confirm">
+							Escribe <span class="mono" id="files-delete-name">—</span> para confirmar</label>
+						<input type="text" class="form-control form-control-sm mono" id="files-delete-confirm" autocomplete="off">
+					</div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+						<i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
+					<button type="button" class="btn btn-danger" id="files-delete-ok" disabled>
+						<i class="fa-solid fa-trash"></i><span>Eliminar</span></button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="files-upload-modal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">Subir archivo</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body">
+					<div class="small text-body-secondary mb-2">Destino: <span class="mono" id="files-upload-dest">—</span></div>
+					<label class="form-label small mb-1" for="files-upload-file">Archivo</label>
+					<input type="file" class="form-control form-control-sm" id="files-upload-file">
+					<label class="form-label small mb-1 mt-3" for="files-upload-name">Nombre en el NAS</label>
+					<input type="text" class="form-control form-control-sm mono" id="files-upload-name" autocomplete="off">
+					<div class="form-check mt-3">
+						<input class="form-check-input" type="checkbox" id="files-upload-overwrite">
+						<label class="form-check-label small" for="files-upload-overwrite">Sobrescribir si ya existe</label>
+					</div>
+					<div class="form-text" id="files-upload-hint"></div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+						<i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
+					<button type="button" class="btn btn-primary" id="files-upload-ok" disabled>
+						<i class="fa-solid fa-upload"></i><span>Subir</span></button>
 				</div>
 			</div>
 		</div>
