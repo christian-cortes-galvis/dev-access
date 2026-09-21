@@ -335,14 +335,18 @@ a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
 .disk-svg { width: 104px; height: 104px; display: block; }
 .disk-svg .disk-track { fill: none; stroke: var(--bs-border-color); stroke-width: 10; }
 .disk-svg .disk-value {
-  fill: none; stroke: var(--warn); stroke-width: 10; stroke-linecap: round;
+  fill: none; stroke-width: 10; stroke-linecap: round;
   transform: rotate(-90deg); transform-origin: 60px 60px;
   transition: stroke-dasharray .4s ease;
 }
-.disk-card.disk-danger .disk-svg .disk-value { stroke: var(--err); }
-.disk-card.disk-ok .disk-svg .disk-value { stroke: var(--ok); }
+/* Con copias el anillo va por tramos: topes rectos para no tapar el tramo azul. */
+.disk-svg.disk-has-copies .disk-value { stroke-linecap: butt; }
+.disk-svg .disk-used { stroke: var(--warn); }
+.disk-svg .disk-copies { stroke: var(--info); }
+.disk-card.disk-danger .disk-svg .disk-used { stroke: var(--err); }
+.disk-card.disk-ok .disk-svg .disk-used { stroke: var(--ok); }
 .disk-card.disk-off .disk-svg .disk-value {
-  stroke: var(--muted); stroke-dasharray: 6 10 !important; stroke-linecap: butt;
+  stroke: var(--muted); stroke-dasharray: 6 10 !important;
 }
 .disk-center {
   position: absolute; inset: 0;
@@ -360,8 +364,17 @@ a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
   letter-spacing: .08em; color: var(--muted);
 }
 .disk-bar { height: 8px; border-radius: 999px; background: var(--surface-2); margin-bottom: 8px; }
+.disk-bar-copies { background: var(--info); }
 .disk-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
 .disk-legend b { color: var(--text); }
+.disk-key { display: inline-flex; align-items: center; gap: 5px; }
+.disk-key i { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.disk-key-copies i { background: var(--info); }
+.disk-key-copies b { color: var(--info); }
+.disk-key-other i { background: var(--warn); }
+.disk-card.disk-danger .disk-key-other i { background: var(--err); }
+.disk-card.disk-off .disk-key-other i { background: var(--muted); }
+.disk-key-free i { background: var(--bs-border-color); }
 .disk-note { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; }
 .disk-card.disk-warn .disk-note { color: var(--warn); }
 .disk-card.disk-danger .disk-note { color: var(--err); }

@@ -69,18 +69,30 @@ export function barList(items, formatter) {
   return rows;
 }
 
-/** Anillo de uso para el disco: percent 0..100, level ok|warn|danger|off. */
-export function diskGauge(percent, level) {
-  const value = Math.max(0, Math.min(100, Number(percent) || 0));
+/**
+ * Anillo de uso del disco. `percent` es el uso total y `copiesPercent` la parte
+ * de ese uso ocupada por las copias (se pinta en otro color, contigua al inicio).
+ */
+export function diskGauge(percent, level, copiesPercent) {
   const radius = 52;
   const length = 2 * Math.PI * radius;
-  const used = (value / 100) * length;
-  return '<svg class="disk-svg" viewBox="0 0 120 120" role="img" aria-label="' +
-    value.toFixed(1) + '% de uso">' +
-    '<circle class="disk-track" cx="60" cy="60" r="' + radius + '"/>' +
-    '<circle class="disk-value" data-level="' + (level || 'warn') + '" cx="60" cy="60" r="' + radius +
-    '" stroke-dasharray="' + used.toFixed(1) + ' ' + (length - used).toFixed(1) + '"/>' +
-    '</svg>';
+  const clamp = (value) => Math.max(0, Math.min(100, Number(value) || 0));
+  const used = clamp(percent);
+  const copies = Math.min(clamp(copiesPercent), used);
+  const usedArc = (used / 100) * length;
+  const copiesArc = (copies / 100) * length;
+  const arc = (cls, value, offset) => {
+    const arcLength = Math.min(value, length);
+    return '<circle class="disk-value ' + cls + '" cx="60" cy="60" r="' + radius +
+      '" stroke-dasharray="' + arcLength.toFixed(1) + ' ' + (length - arcLength).toFixed(1) + '"' +
+      (offset ? ' stroke-dashoffset="-' + offset.toFixed(1) + '"' : '') + '/>';
+  };
+  const arcs = copiesArc > 0.5
+    ? arc('disk-copies', copiesArc) + (usedArc - copiesArc > 0.5 ? arc('disk-used', usedArc - copiesArc, copiesArc) : '')
+    : arc('disk-used', usedArc);
+  return '<svg class="disk-svg' + (copiesArc > 0.5 ? ' disk-has-copies' : '') + '" viewBox="0 0 120 120" ' +
+    'role="img" aria-label="' + used.toFixed(1) + '% de uso">' +
+    '<circle class="disk-track" cx="60" cy="60" r="' + radius + '"/>' + arcs + '</svg>';
 }
 
 /** items: [{label, value}] value en bytes. */

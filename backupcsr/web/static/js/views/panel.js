@@ -60,32 +60,64 @@ function alertRow(alert) {
 }
 
 /* El aviso de NAS no es una alerta de texto: es un disco con anillo de uso. */
-function nasCard(alert, stats) {
+function nasCard(alert, stats, copies) {
   const level = !stats ? 'off' : (alert.level === 'danger' ? 'danger' : 'warn');
   const parsed = parseFloat((String(alert.text).match(/([\d.]+)\s*%/) || [])[1]);
   const percent = stats ? Number(stats.percent) || 0 : (isNaN(parsed) ? 0 : parsed);
 
+  /* Copias: parte del uso ocupada por las tareas (bytes medidos por el backend). */
+  const bytes = copies && copies.bytes ? Math.min(Number(copies.bytes), Number(stats.total) || 0) : 0;
+  const copiesPercent = stats && Number(stats.total) ? (bytes / Number(stats.total)) * 100 : 0;
+  const otherBytes = copies ? Math.max(0, (Number(stats.used) || 0) - bytes) : 0;
+
   const ring = el('div', { class: 'disk-ring' });
-  ring.innerHTML = diskGauge(percent, level);
+  ring.innerHTML = diskGauge(percent, level, copiesPercent);
   ring.appendChild(el('div', { class: 'disk-center' }, [
     el('span', { class: 'disk-percent', text: stats ? percent.toFixed(1) + '%' : '—' }),
     el('span', { class: 'disk-caption', text: stats ? 'usado' : 'sin datos' }),
   ]));
 
-  const bar = el('div', { class: 'progress disk-bar', role: 'progressbar', 'aria-valuenow': String(percent), 'aria-valuemin': '0', 'aria-valuemax': '100' }, [
-    el('div', {
-      class: 'progress-bar ' + (level === 'danger' ? 'bg-danger' : level === 'warn' ? 'bg-warning' : level === 'off' ? 'bg-secondary' : 'bg-success'),
-      style: 'width:' + Math.max(0, Math.min(100, percent)) + '%',
-    }),
-  ]);
+  const bars = [];
+  if (copies && bytes) {
+    bars.push(el('div', {
+      class: 'progress-bar disk-bar-copies',
+      style: 'width:' + Math.max(0, Math.min(100, copiesPercent)).toFixed(2) + '%',
+      title: 'Copias de seguridad: ' + fmtGb(bytes) + (copies.partial ? ' (medición parcial)' : ''),
+    }));
+  }
+  bars.push(el('div', {
+    class: 'progress-bar ' + (level === 'danger' ? 'bg-danger' : level === 'warn' ? 'bg-warning' : level === 'off' ? 'bg-secondary' : 'bg-success'),
+    style: 'width:' + Math.max(0, Math.min(100, percent - (copies && bytes ? copiesPercent : 0))).toFixed(2) + '%',
+    title: copies && bytes ? 'Otro uso del NAS' : 'Uso del NAS',
+  }));
+  const bar = el('div', { class: 'progress disk-bar', role: 'progressbar', 'aria-valuenow': String(percent), 'aria-valuemin': '0', 'aria-valuemax': '100' }, bars);
 
-  const legend = stats
-    ? el('div', { class: 'disk-legend' }, [
-      el('span', {}, [el('b', { text: fmtGb(stats.used) }), document.createTextNode(' usados')]),
-      el('span', {}, [el('b', { text: fmtGb(stats.free) }), document.createTextNode(' libres')]),
-      el('span', {}, [el('b', { text: fmtGb(stats.total) }), document.createTextNode(' total')]),
-    ])
-    : null;
+  let legend = null;
+  if (stats) {
+    const keys = [];
+    if (copies) {
+      keys.push(el('span', {
+        class: 'disk-key disk-key-copies',
+        title: (copies.partial ? 'Medición parcial: alguna tarea no tiene tamaño calculado. ' : '') +
+          (copies.files ? copies.files.toLocaleString('es-CO') + ' archivos en las tareas' : 'Bytes medidos por las tareas'),
+      }, [
+        el('i'), el('b', { text: (copies.partial ? '≥ ' : '') + fmtGb(bytes) }),
+        document.createTextNode(' en copias'),
+      ]));
+      keys.push(el('span', { class: 'disk-key disk-key-other' }, [
+        el('i'), el('b', { text: fmtGb(otherBytes) }), document.createTextNode(' otro uso'),
+      ]));
+    } else {
+      keys.push(el('span', {}, [el('b', { text: fmtGb(stats.used) }), document.createTextNode(' usados')]));
+    }
+    keys.push(el('span', { class: 'disk-key disk-key-free' }, [
+      el('i'), el('b', { text: fmtGb(stats.free) }), document.createTextNode(' libres'),
+    ]));
+    keys.push(el('span', { class: 'disk-key disk-key-total' }, [
+      el('b', { text: fmtGb(stats.total) }), document.createTextNode(' total'),
+    ]));
+    legend = el('div', { class: 'disk-legend' }, keys);
+  }
 
   return el('div', { class: 'disk-card disk-' + level }, [
     ring,
@@ -107,14 +139,25 @@ function nasCard(alert, stats) {
   ]);
 }
 
-function renderAlerts(summary) {
+/* Tamaño de las copias: lo que el backend ya midió para las tareas. */
+function copiesInfo(summary, state) {
+  if (summary.bytes_total === null || summary.bytes_total === undefined) return null;
+  const bytes = Number(summary.bytes_total) || 0;
+  if (!bytes) return null;  /* sin mediciones: leyenda clásica de usados/libres */
+  const jobs = (state && state.jobs) || [];
+  const measured = jobs.filter((job) => job.size && job.size.bytes !== null && job.size.bytes !== undefined);
+  return { bytes, files: Number(summary.files_total) || 0, partial: jobs.length > 0 && measured.length < jobs.length };
+}
+
+function renderAlerts(summary, state) {
   const box = $('alert-box');
   if (!box) return;
   const alerts = summary.alerts || [];
   const stats = summary.nas_stats || null;
+  const copies = stats ? copiesInfo(summary, state) : null;
   box.innerHTML = '';
   alerts.slice(0, 6).forEach((alert) => {
-    box.appendChild(alert.kind === 'nas' ? nasCard(alert, stats) : alertRow(alert));
+    box.appendChild(alert.kind === 'nas' ? nasCard(alert, stats, copies) : alertRow(alert));
   });
   box.hidden = alerts.length === 0;
 }
@@ -162,7 +205,7 @@ function renderCharts(state) {
 function renderSummary(state) {
   const summary = state.summary || { counts: {} };
   renderKpis(summary);
-  renderAlerts(summary);
+  renderAlerts(summary, state);
   renderCharts(state);
 }
 

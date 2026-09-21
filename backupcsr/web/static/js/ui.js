@@ -71,11 +71,15 @@ export function fmtGb(bytes) {
   return (bytes / (1024 ** 3)).toFixed(2) + ' GB';
 }
 
+/* Fechas sin segundos: "21/9/2026, 11:20". */
 export function fmtDate(value) {
   if (!value) return '—';
   const d = new Date(value);
   if (isNaN(d.getTime())) return value;
-  return d.toLocaleString('es-CO', { hour12: false });
+  return d.toLocaleString('es-CO', {
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  });
 }
 
 export function fmtDuration(seconds) {
