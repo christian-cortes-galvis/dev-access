@@ -164,6 +164,10 @@ def collect_jobs() -> list[dict]:
         latest = runs[-1] if runs else None
         running = runner.is_running(job)
         status, detail = logs.evaluate(latest, _schedule(job), reference, running)
+        if not job.get("enabled"):
+            # Una tarea deshabilitada no "debe" correr: ni tarda ni falta, y así no
+            # entra en los KPIs de fallos/sin datos ni en el banner de alertas.
+            status, detail = "DESHABILITADA", "sin horario ni script (deshabilitada)"
         size = sizes.current(job)
         result.append(
             {
@@ -172,7 +176,11 @@ def collect_jobs() -> list[dict]:
                 "status_detail": detail,
                 "running": running,
                 "last_run": logs.run_to_dict(latest) if latest else None,
-                "next_run": _iso(logs.next_run(_schedule(job), reference)),
+                "next_run": (
+                    _iso(logs.next_run(_schedule(job), reference))
+                    if job.get("enabled")
+                    else None
+                ),
                 "runs_total": len(runs),
                 "size": size,
                 "size_bytes": size.get("bytes"),
@@ -186,6 +194,8 @@ def build_alerts(jobs: list[dict]) -> list[dict]:
     """Avisos para el banner: jobs vencidos/fallidos, NAS lleno o no disponible."""
     alerts: list[dict] = []
     for job in jobs:
+        if not job.get("enabled"):
+            continue
         if job["status"] == "FALLO":
             alerts.append({
                 "level": "danger", "kind": "job", "slug": job["slug"],
@@ -439,6 +449,15 @@ async def update_job(slug: str, patch: JobPatch, user: dict = Depends(auth.requi
             raise HTTPException(status_code=400, detail=f"{field} inválido: {value}")
         updates[field] = value.strip()
     if patch.enabled is not None:
+        script = config.JOBS_DIR / f"{slug}.sh"
+        if patch.enabled and not script.exists():
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"no se puede habilitar {slug}: falta {script} "
+                    "(créalo e instálalo antes de darle horario)"
+                ),
+            )
         updates["enabled"] = 1 if patch.enabled else 0
     if not updates:
         raise HTTPException(status_code=400, detail="nada que actualizar")

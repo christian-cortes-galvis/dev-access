@@ -95,3 +95,44 @@ jobs:
       minute: "50"
       hour: "6-19"
     sort: 60
+
+  # --- Tareas deshabilitadas --------------------------------------------------
+  # Quedaron fuera de la migración (OneDrive vetado / Ticware no debe llenar el
+  # NAS) y se registran aquí, deshabilitadas, para no perderlas de vista. No
+  # tienen script en /opt/backupcsr/jobs: no entran al cron, ni al validador, ni
+  # se miden en el panel. Para habilitarlas hay que escribir el script, ajustar
+  # origen/destino y revisar el horario (ver README, "Tareas deshabilitadas").
+
+  - slug: google-web
+    name: Google Web (historias clínicas)
+    description: Copia del sitio de historias clínicas del VPS Google (SFTP con la llave google). Se dejó fuera por publicar a OneDrive; falta el script y confirmar origen y destino.
+    origin_type: sftp
+    source: /var/www/html/historiasclinicas/files
+    dest_rel: files
+    lockfile: /run/lock/backupcsr-google-web.lock
+    enabled: false
+    sort: 90
+
+  - slug: latino-web
+    name: Latino Web
+    description: Archivos web de Chequeos/Latino (SFTP con la llave latino). Se dejó fuera por publicar a OneDrive; falta el script y confirmar origen y destino.
+    origin_type: sftp
+    lockfile: /run/lock/backupcsr-latino-web.lock
+    enabled: false
+    sort: 91
+
+  - slug: ticware-bd
+    name: Ticware BD
+    description: Base de datos de Ticware (FTP). Se dejó fuera porque Ticware no debe llenar el NAS; falta el script y confirmar origen y destino.
+    origin_type: ftp
+    lockfile: /run/lock/backupcsr-ticware-bd.lock
+    enabled: false
+    sort: 92
+
+  - slug: ticware-web
+    name: Ticware Web
+    description: Archivos web de Ticware (FTP). Se dejó fuera porque Ticware no debe llenar el NAS; falta el script y confirmar origen y destino.
+    origin_type: ftp
+    lockfile: /run/lock/backupcsr-ticware-web.lock
+    enabled: false
+    sort: 93

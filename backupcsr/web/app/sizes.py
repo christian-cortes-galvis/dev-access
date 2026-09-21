@@ -35,6 +35,22 @@ def _lock_for(slug: str) -> threading.Lock:
         return lock
 
 
+def _disabled(job: dict) -> bool:
+    """Un job deshabilitado no se mide: puede no tener destino todavía."""
+    return not job.get("enabled", True)
+
+
+# Sin medición (job deshabilitado). `disabled` lo distingue de "aún midiendo".
+_UNMEASURED = {
+    "bytes": None, "files": 0, "truncated": False, "error": None,
+    "computed_at": None, "cached": False, "pending": False, "disabled": True,
+}
+
+
+def unmeasured() -> dict:
+    return dict(_UNMEASURED)
+
+
 def _anchor(job: dict) -> Path:
     dest = (job.get("dest_rel") or "").strip("/")
     base = config.NAS_MOUNT.resolve()
@@ -127,6 +143,8 @@ def _public(data: dict) -> dict:
 
 def current(job: dict) -> dict:
     """Tamaño cacheado del job; `pending=True` si aún no se ha medido."""
+    if _disabled(job):
+        return unmeasured()
     with _lock_for(job.get("slug") or ""):
         cached = _cache.get(job.get("slug") or "")
     if not cached:
@@ -161,6 +179,8 @@ def job_size(job: dict, force: bool = False) -> dict:
     por el NAS (CIFS) y por la RAM con la propia copia y era parte de lo que dejaba
     al anfitrión sin memoria durante las corridas.
     """
+    if _disabled(job):
+        return unmeasured()
     slug = job.get("slug") or ""
     now = time.time()
     with _lock_for(slug):
@@ -192,6 +212,9 @@ def _warm_worker(jobs: list[dict], force: bool) -> None:
         last = len(jobs) - 1
         for index, job in enumerate(jobs):
             try:
+                if _disabled(job):
+                    log.debug("warm: %s está deshabilitado; se omite el escaneo", job.get("slug"))
+                    continue
                 if not force and job_running(job):
                     log.debug("warm: %s está corriendo; se omite el escaneo", job.get("slug"))
                     continue

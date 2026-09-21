@@ -63,6 +63,28 @@ usa `--delete`: si el origen remoto queda incompleto, el destino del NAS refleja
 `ruta56-bd` y `ruta56-web` comparten `/mnt/nas/ruta56`; por eso `ruta56-bd` excluye `storage`
 para no borrar lo que publica `ruta56-web`.
 
+### Tareas deshabilitadas
+
+Quedaron fuera de la migración y están **registradas, deshabilitadas, en el catálogo**
+(`web/jobs.yml`) para no perderlas: no tienen script en `/opt/backupcsr/jobs`, así que no
+entran al cron, ni al validador, ni se miden en el panel (y el portal no avisa por ellas).
+
+| Tarea | Origen | Destino | Por qué quedó fuera |
+|-------|--------|---------|---------------------|
+| `google-web` | SFTP `GOOGLE_WEB_HOST` `/var/www/html/historiasclinicas/files` | `files` (provisional) | Publicaba a OneDrive (vetado) |
+| `latino-web` | SFTP `LATINO_HOST:2200`, ruta por confirmar | por confirmar | Publicaba a OneDrive (vetado) |
+| `ticware-bd` | FTP `TICWARE_HOST`, ruta por confirmar | por confirmar | Ticware no debe llenar el NAS |
+| `ticware-web` | FTP `TICWARE_HOST`, ruta por confirmar | por confirmar | Ticware no debe llenar el NAS |
+
+`borrar_lista.sh` (limpieza destructiva con rutas del VPS) tampoco se registró: no es una copia.
+
+Para habilitar una: escribir `jobs/<slug>.sh` (usar `lib/common.sh` como los demás), ajustar
+`source`/`dest_rel` en `web/jobs.yml`, reinstalar (`sudo install -m 0755 jobs/<slug>.sh
+/opt/backupcsr/jobs/`) y habilitarla en el panel. El portal **rechaza habilitarla si falta el
+script** (`409`), para que no quede un horario apuntando a un archivo inexistente. Ojo con
+`google-web`: con `--delete` sobre `/mnt/nas/files` borraría del NAS lo que aún no esté en el
+VPS; revisar ese destino antes de activarla.
+
 ## Validación
 
 ```bash

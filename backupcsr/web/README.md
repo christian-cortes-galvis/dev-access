@@ -8,7 +8,8 @@ con `backups.cortexdev.win`/`pbs`, que es Proxmox Backup Server).
 
 - **Panel**: app-shell empresarial (barra lateral + topbar) con KPIs (GB almacenados, crecimiento
   7/30 días, jobs OK/fallidos, duración media, NAS libre), gráficos de tendencia y tabla de jobs
-  con estado (OK / EN CURSO / TARDE / FALLÓ / NUNCA), tamaño, última y próxima ejecución.
+  con estado (OK / EN CURSO / TARDE / FALLÓ / NUNCA / DESHABILITADA), tamaño, última y próxima
+  ejecución.
   La tabla **no repite botones por fila**: se selecciona una fila y las acciones (ejecutar real,
   `DRY_RUN`, **reintentar**, log, historial, archivos, horario, habilitar/deshabilitar) se aplican
   desde una única barra superior estilo DataTables *Buttons*, con iconos Font Awesome.
@@ -22,10 +23,18 @@ con `backups.cortexdev.win`/`pbs`, que es Proxmox Backup Server).
   Ver [Gestión de archivos](#gestión-de-archivos-pestaña-archivos).
 - **Programación**: habilitar, deshabilitar y editar el horario con **presets y previsualización**
   de las próximas 5 ejecuciones; con la gestión activa reescribe `/etc/cron.d/backupcsr`.
+  Una tarea `enabled: false` en `jobs.yml` se lista con la etiqueta *deshabilitada*, sin línea en el
+  cron, sin alertas y sin medición de tamaño; el portal **no deja habilitarla si falta
+  `/opt/backupcsr/jobs/<slug>.sh`** (`409`). Así se registran tareas que hoy no corren (ver
+  `README.md`, "Tareas deshabilitadas").
 - **Usuarios** (admin): alta, rol `admin`/`viewer`, activar/desactivar y reseteo de contraseña;
   cada usuario puede cambiar la suya.
 - **Auditoría** (admin): quién ejecutó, editó, deshabilitó o gestionó usuarios y cuándo.
-- **Alertas**: banner con jobs fallidos/atrasados, NAS sin montar o por encima del umbral de uso.
+- **Notificaciones**: botón de campana en la barra superior (con contador) que abre el listado de
+  jobs fallidos/atrasados, MySQL no disponible y desfase de reloj, en tarjetas con icono y nivel.
+  Ya no se muestran dentro del panel.
+- **Almacenamiento NAS**: el disco con anillo de uso se muestra siempre en el panel, en la misma
+  fila que los gráficos de tendencia y duración (verde/ámbar/rojo según el uso).
 
 ## Tema
 
@@ -209,8 +218,9 @@ journalctl -u backupcsr-web -n 100
 curl -fsS http://127.0.0.1:8089/api/health | jq
 cd /opt/backupcsr/web && venv/bin/python -m app.cli status
 
-# Pruebas de la gestión de archivos (NAS temporal; no toca /mnt/nas, ni MySQL, ni /run/lock):
+# Pruebas (NAS temporal; no tocan /mnt/nas, ni MySQL, ni /run/lock, ni /etc):
 cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_files_manage.py
+cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_jobs_disabled.py
 ```
 
 ### El Panel no lista tareas ("Sin tareas que mostrar")
@@ -247,12 +257,12 @@ Auditoría, Tamaños y «Exportar CSV/JSON» (`/api/runs/export` navega a un 404
 Firefox (y a veces Chrome) autocompletan los campos de texto con el usuario de la plataforma
 porque la página tiene un modal con contraseñas. Están puestos los dos frenos:
 
-- `autocomplete="off"` (más `name`, `type="search"` y `data-form-type="other"`) en `#global-search`
-  y `#jobs-search`, y `autocomplete="off"` en los formularios de filtros. Firefox ignora `off` en
-  los campos que cree de login, así que esto solo no basta.
-- **`readonly`** en los dos buscadores (atributo en el HTML): los navegadores no rellenan campos de
-  solo lectura. Se libera en cuanto hay intención real (`pointerdown`, `touchstart`, `focusin`,
-  `keydown`), así que escribir funciona igual.
+- `autocomplete="off"` (más `name`, `type="search"` y `data-form-type="other"`) en `#jobs-search`,
+  y `autocomplete="off"` en los formularios de filtros. Firefox ignora `off` en los campos que cree
+  de login, así que esto solo no basta.
+- **`readonly`** en el buscador de la tabla (atributo en el HTML): los navegadores no rellenan
+  campos de solo lectura. Se libera en cuanto hay intención real (`pointerdown`, `touchstart`,
+  `focusin`, `keydown`), así que escribir funciona igual.
 - Guardia en `shell.js` (`setupFilters`): solo `keydown`, `paste` y `compositionstart` marcan el
   campo como escrito por la persona. El `input` del autofill —llega a veces **después** del clic—
   se descarta y se limpia el valor, de modo que nunca deja la tabla filtrada y vacía. También se

@@ -3,7 +3,7 @@
    La tabla no repite botones por fila: se selecciona una fila y las acciones se
    aplican desde una única barra tipo DataTables (Buttons) superior. */
 import {
-  $, el, icon, pill, statusClass, statusLabel, fmtGb, fmtDate, fmtDuration,
+  $, el, pill, statusClass, statusLabel, fmtGb, fmtDate, fmtDuration,
   scheduleText, toast, confirmDialog,
 } from '../ui.js';
 import { sparkline, barList, emptyChart, diskGauge } from '../chart.js';
@@ -53,17 +53,18 @@ function renderKpis(summary) {
     nas && nas.percent >= 80 ? 'warn' : ''));
 }
 
-function alertRow(alert) {
-  return el('div', {
-    class: 'alert alert-' + alert.level + ' mb-0 d-flex align-items-center gap-2',
-  }, [icon('alert'), el('span', { text: alert.text })]);
-}
+/* ----------------------------- información NAS ----------------------------- */
 
-/* El aviso de NAS no es una alerta de texto: es un disco con anillo de uso. */
+/* El aviso de NAS no es una alerta de texto: es un disco con anillo de uso que
+   vive siempre en el panel junto a los gráficos. `alert` puede ser null cuando
+   el NAS está sano. */
 function nasCard(alert, stats, copies) {
-  const level = !stats ? 'off' : (alert.level === 'danger' ? 'danger' : 'warn');
-  const parsed = parseFloat((String(alert.text).match(/([\d.]+)\s*%/) || [])[1]);
+  const parsed = alert ? parseFloat((String(alert.text).match(/([\d.]+)\s*%/) || [])[1]) : NaN;
   const percent = stats ? Number(stats.percent) || 0 : (isNaN(parsed) ? 0 : parsed);
+  const level = !stats ? 'off'
+    : (alert && alert.level === 'danger') ? 'danger'
+      : (alert || percent >= 80) ? 'warn'
+        : 'ok';
 
   /* Copias: parte del uso ocupada por las tareas (bytes medidos por el backend). */
   const bytes = copies && copies.bytes ? Math.min(Number(copies.bytes), Number(stats.total) || 0) : 0;
@@ -119,6 +120,17 @@ function nasCard(alert, stats, copies) {
     legend = el('div', { class: 'disk-legend' }, keys);
   }
 
+  let note = 'NAS no disponible';
+  if (stats) {
+    if (alert) {
+      note = (level === 'danger' ? 'Espacio crítico: ' : level === 'warn' ? 'Aviso: ' : '') + alert.text;
+    } else {
+      note = 'NAS operativo: ' + percent.toFixed(1) + '% usado';
+    }
+  } else if (alert) {
+    note = alert.text;
+  }
+
   return el('div', { class: 'disk-card disk-' + level }, [
     ring,
     el('div', { class: 'disk-body' }, [
@@ -129,11 +141,8 @@ function nasCard(alert, stats, copies) {
       bar,
       legend,
       el('div', { class: 'disk-note' }, [
-        el('i', { class: level === 'off' ? 'fa-solid fa-plug-circle-xmark' : 'fa-solid fa-triangle-exclamation' }),
-        el('span', {
-          text: level === 'off' ? alert.text
-            : (level === 'danger' ? 'Espacio crítico: ' : 'Aviso: ') + alert.text,
-        }),
+        el('i', { class: level === 'off' ? 'fa-solid fa-plug-circle-xmark' : (level === 'ok' ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation') }),
+        el('span', { text: note }),
       ]),
     ]),
   ]);
@@ -149,17 +158,15 @@ function copiesInfo(summary, state) {
   return { bytes, files: Number(summary.files_total) || 0, partial: jobs.length > 0 && measured.length < jobs.length };
 }
 
-function renderAlerts(summary, state) {
-  const box = $('alert-box');
+/* El disco NAS se muestra siempre, tenga o no un aviso asociado. */
+function renderNas(summary, state) {
+  const box = $('nas-info');
   if (!box) return;
   const alerts = summary.alerts || [];
+  const alert = alerts.filter((item) => item.kind === 'nas')[0] || null;
   const stats = summary.nas_stats || null;
   const copies = stats ? copiesInfo(summary, state) : null;
-  box.innerHTML = '';
-  alerts.slice(0, 6).forEach((alert) => {
-    box.appendChild(alert.kind === 'nas' ? nasCard(alert, stats, copies) : alertRow(alert));
-  });
-  box.hidden = alerts.length === 0;
+  box.replaceChildren(nasCard(alert, stats, copies));
 }
 
 function seriesPoints(series, slug) {
@@ -201,11 +208,11 @@ function renderCharts(state) {
   }
 }
 
-/* KPIs, alertas y gráficos: se pueden repintar sin tocar la tabla de jobs. */
+/* KPIs, disco NAS y gráficos: se pueden repintar sin tocar la tabla de jobs. */
 function renderSummary(state) {
   const summary = state.summary || { counts: {} };
   renderKpis(summary);
-  renderAlerts(summary, state);
+  renderNas(summary, state);
   renderCharts(state);
 }
 
@@ -223,8 +230,8 @@ function jobRow(job) {
   const size = job.size || {};
   tr.appendChild(el('td', {}, [
     el('div', { text: size.bytes === null || size.bytes === undefined ? '—' : fmtGb(size.bytes) }),
-    el('div', { class: 'muted small', text: size.pending ? 'midiendo…' :
-      (size.error ? size.error : (size.files || 0) + ' archivos') }),
+    el('div', { class: 'muted small', text: size.disabled ? 'sin medir (deshabilitada)' :
+      (size.pending ? 'midiendo…' : (size.error ? size.error : (size.files || 0) + ' archivos')) }),
   ]));
 
   const last = job.last_run;
@@ -340,7 +347,6 @@ function reasonCell(message, actionLabel, action) {
 function clearFilter() {
   if (!ctxRef) return;
   ctxRef.state.jobsSearch = '';
-  ctxRef.state.search = '';
   const box = $('jobs-search');
   if (box) box.value = '';
   renderJobs(ctxRef.state);

@@ -10,9 +10,9 @@
 	<script src="/theme.js?v=2"></script>
 	<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
 	<link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-	<link rel="stylesheet" href="/style.css?v=4">
+	<link rel="stylesheet" href="/style.css?v=6">
 	<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
-	<script type="module" src="/js/shell.js?v=3"></script>
+	<script type="module" src="/js/shell.js?v=5"></script>
 </head>
 
 <body>
@@ -50,18 +50,26 @@
 					aria-label="Menú"></button>
 				<nav class="breadcrumbs" id="breadcrumbs"></nav>
 				<div class="topbar-actions">
-					<div class="input-group input-group-sm d-none d-md-flex topbar-search">
-						<span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
-						<input id="global-search" class="form-control" name="job-filter" type="search" readonly
-							placeholder="Buscar job…" aria-label="Buscar job" autocomplete="off"
-							autocapitalize="off" autocorrect="off" spellcheck="false" data-form-type="other"
-							data-lpignore="true">
-					</div>
 					<span class="conn-pill hide-sm" id="conn-db"><span class="dot"></span>MySQL</span>
 					<span class="conn-pill hide-sm" id="conn-nas"><span class="dot"></span>NAS</span>
-					<button type="button" class="btn btn-sm btn-outline-secondary icon-btn" id="refresh-all">
-						<i class="fa-solid fa-rotate"></i><span>Actualizar</span></button>
-					<button type="button" class="btn btn-outline-secondary rounded-circle theme-toggle" id="theme-toggle"></button>
+					<div class="dropdown">
+						<button type="button" class="btn btn-outline-secondary icon-toggle" id="alerts-toggle"
+							data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+							aria-label="Ver notificaciones">
+							<i class="fa-solid fa-bell"></i>
+							<span class="icon-toggle-badge" id="alerts-count" hidden>0</span>
+						</button>
+						<div class="dropdown-menu dropdown-menu-end alerts-menu" id="alerts-menu"
+							aria-labelledby="alerts-toggle">
+							<div class="alerts-menu-head">
+								<span class="alerts-menu-title"><i class="fa-solid fa-bell"></i>Notificaciones</span>
+								<span class="badge rounded-pill pill-unknown" id="alerts-menu-count">0</span>
+							</div>
+							<div class="alerts-menu-body" id="alerts-list"></div>
+						</div>
+					</div>
+					<button type="button" class="btn btn-outline-secondary icon-toggle" id="theme-toggle"
+						aria-label="Cambiar tema"></button>
 					<div class="dropdown">
 						<button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
 							data-bs-toggle="dropdown" aria-expanded="false" id="user-name">—</button>
@@ -80,12 +88,12 @@
 				<!-- ------------------------------ Panel ------------------------------ -->
 				<section id="view-panel" class="view">
 					<div class="row row-cols-2 row-cols-md-3 row-cols-xl-6 g-3 mb-3" id="kpi-row"></div>
-					<div id="alert-box" class="alert-list mb-3" hidden></div>
-					<div class="row g-3 mb-3">
-						<div class="col-lg-8">
+					<div class="row g-3 mb-3" id="charts-row">
+						<div class="col-12 col-lg-4 chart-col-nas" id="nas-info"></div>
+						<div class="col-12 col-lg-4">
 							<div class="card chart-card h-100">
 								<div class="card-body">
-									<div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+									<div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
 										<span class="chart-title">Tendencia de tamaño almacenado</span>
 										<select id="chart-job" class="form-select form-select-sm" style="max-width:240px"></select>
 									</div>
@@ -93,7 +101,7 @@
 								</div>
 							</div>
 						</div>
-						<div class="col-lg-4">
+						<div class="col-12 col-lg-4">
 							<div class="card chart-card h-100">
 								<div class="card-body">
 									<div class="chart-title mb-2">Duración última ejecución</div>
@@ -156,8 +164,7 @@
 					</div>
 					<p class="small text-body-secondary mt-2 mb-0">
 						Haz clic en una fila para seleccionarla (no cambia de vista) y usa los botones de la
-						barra superior: el log se abre con <em>Log</em>. <kbd>Enter</kbd> también selecciona;
-						<em>Actualizar</em> no pierde la selección.
+						barra superior: el log se abre con <em>Log</em>. <kbd>Enter</kbd> también selecciona.
 					</p>
 				</section>
 

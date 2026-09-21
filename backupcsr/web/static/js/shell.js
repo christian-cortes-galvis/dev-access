@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { applyDataIcons } from './icons.js';
 import {
-  $, el, pill, fmtDate, fmtDuration, fmtGb, relTime, toast, confirmDialog,
+  $, el, icon, pill, fmtDate, fmtDuration, fmtGb, relTime, toast, confirmDialog,
   openModal, hideModal,
 } from './ui.js';
 import { panel } from './views/panel.js';
@@ -21,7 +21,6 @@ const state = {
   manageCron: false,
   series: [],
   seriesLoaded: false,
-  search: '',
   tab: 'panel',
   histJob: '',
   filesJob: '',
@@ -183,6 +182,82 @@ function setText(id, value) {
   if (node) node.textContent = value;
 }
 
+/* ------------------------------- alertas ---------------------------------- */
+
+/* Notificaciones de la campana: solo avisos de texto (jobs, MySQL y reloj).
+   El estado del NAS se muestra siempre en el panel (ver views/panel.js). */
+const NOTIF_META = {
+  job: { icon: 'server', title: 'Tarea' },
+  db: { icon: 'database', title: 'Base de datos' },
+  clock: { icon: 'clock', title: 'Reloj del portal' },
+};
+
+function notifRow(alert) {
+  const meta = NOTIF_META[alert.kind] || { icon: 'alert', title: 'Aviso' };
+  const danger = alert.level === 'danger';
+  let title = meta.title;
+  let text = alert.text;
+  if (alert.kind === 'job') {
+    const cut = String(text).indexOf(': ');
+    if (cut > 0) {
+      title = String(text).slice(0, cut);
+      text = String(text).slice(cut + 2);
+    }
+  }
+  return el('div', { class: 'notif ' + (danger ? 'notif-danger' : 'notif-warn') }, [
+    el('div', { class: 'notif-icon' }, [icon(meta.icon)]),
+    el('div', { class: 'notif-body' }, [
+      el('div', { class: 'notif-title', text: title }),
+      el('div', { class: 'notif-text', text: text }),
+    ]),
+    el('span', { class: 'notif-level', text: danger ? 'Crítico' : 'Aviso' }),
+  ]);
+}
+
+/* Las notificaciones ya no viven dentro del panel: se consultan desde el botón
+   de la barra superior, con un contador en el badge de la campana. No incluyen
+   el estado del NAS: ese se muestra siempre en el panel. */
+function renderAlerts() {
+  const list = $('alerts-list');
+  const badge = $('alerts-count');
+  const countPill = $('alerts-menu-count');
+  const toggle = $('alerts-toggle');
+  const summary = state.summary || {};
+  const alerts = (summary.alerts || []).filter((alert) => alert.kind !== 'nas');
+  const danger = alerts.some((alert) => alert.level === 'danger');
+  const loaded = !!state.summary;
+
+  if (list) {
+    list.innerHTML = '';
+    if (!alerts.length) {
+      list.appendChild(el('div', { class: 'alerts-empty' }, [
+        el('i', { class: loaded ? 'fa-solid fa-circle-check' : 'fa-regular fa-bell' }),
+        el('span', {
+          text: loaded ? 'Sin notificaciones.' : 'Cargando notificaciones…',
+        }),
+      ]));
+    } else {
+      alerts.forEach((alert) => list.appendChild(notifRow(alert)));
+    }
+  }
+
+  if (badge) {
+    badge.hidden = alerts.length === 0;
+    badge.textContent = alerts.length > 99 ? '99+' : String(alerts.length);
+    badge.classList.toggle('is-danger', danger);
+  }
+  if (countPill) {
+    countPill.textContent = String(alerts.length);
+    countPill.className = 'badge rounded-pill ' + (danger ? 'pill-err' : alerts.length ? 'pill-warn' : 'pill-ok');
+  }
+  if (toggle) {
+    toggle.classList.toggle('has-alerts', alerts.length > 0 && !danger);
+    toggle.classList.toggle('has-danger', danger);
+    toggle.setAttribute('aria-label',
+      alerts.length ? 'Ver notificaciones (' + alerts.length + ')' : 'Ver notificaciones');
+  }
+}
+
 function updateStatus() {
   const summary = state.summary || {};
   const dbOk = !!summary.db;
@@ -203,6 +278,7 @@ function updateStatus() {
   if (sbNas) sbNas.className = 'dot ' + (nasOk ? 'ok' : 'off');
   setText('sb-nas-text', nas ? (nas.percent + '%') : (nasOk ? 'montado' : 'no montado'));
   setText('sb-updated', summary.generated_at ? 'actualizado ' + relTime(summary.generated_at) : '—');
+  renderAlerts();
 }
 
 /* Un solo banner con prioridad: error de pintado > endpoints caídos > MySQL. */
@@ -453,50 +529,45 @@ async function savePassword() {
 
 /* ---------------------------------- init ---------------------------------- */
 
-/* Los buscadores son el mismo filtro (arriba y sobre la tabla). Firefox
-   (wfd-id) y Chrome los rellenan con el usuario guardado porque la página tiene
-   un modal con contraseñas. Dos capas:
+/* El filtro de la tabla (jobs-search) se rellena solo con el usuario guardado en
+   Firefox (wfd-id) y Chrome porque la página tiene un modal con contraseñas.
+   Dos capas:
      1) `readonly` (viene en el HTML): los navegadores no rellenan campos de
         solo lectura. Se libera en cuanto hay intención real (clic/tecla/foco).
      2) Solo una pulsación o pegado real marca el campo como escrito por la
         persona; el `input` del autofill —que puede llegar *después* del clic—
         se descarta y se limpia el valor, para que no deje la tabla filtrada. */
 function setupFilters() {
-  const inputs = [$('global-search'), $('jobs-search')].filter(Boolean);
+  const input = $('jobs-search');
+  if (!input) return;
   const apply = (value) => {
-    state.search = value;
     state.jobsSearch = value;
     if (state.tab === 'panel') panel.renderJobs(state);
   };
-  inputs.forEach((input) => {
-    const unlock = () => input.removeAttribute('readonly');
-    ['pointerdown', 'touchstart', 'focusin', 'keydown'].forEach((event) => {
-      input.addEventListener(event, unlock);
-    });
-    ['keydown', 'paste', 'compositionstart'].forEach((event) => {
-      input.addEventListener(event, () => { input.dataset.userTyped = '1'; });
-    });
-    input.addEventListener('focusin', () => {
-      if (input.dataset.userTyped !== '1' && input.value) {
-        input.value = '';
-        apply('');
-      }
-    });
-    input.addEventListener('input', () => {
-      if (input.dataset.userTyped !== '1') {   // autofill del navegador
-        input.value = '';
-        apply('');
-        return;
-      }
-      inputs.forEach((peer) => {
-        if (peer !== input && peer.value !== input.value) peer.value = input.value;
-      });
-      apply(input.value);
-    });
+  const unlock = () => input.removeAttribute('readonly');
+  ['pointerdown', 'touchstart', 'focusin', 'keydown'].forEach((event) => {
+    input.addEventListener(event, unlock);
+  });
+  ['keydown', 'paste', 'compositionstart'].forEach((event) => {
+    input.addEventListener(event, () => { input.dataset.userTyped = '1'; });
+  });
+  input.addEventListener('focusin', () => {
+    if (input.dataset.userTyped !== '1' && input.value) {
+      input.value = '';
+      apply('');
+    }
+  });
+  input.addEventListener('input', () => {
+    if (input.dataset.userTyped !== '1') {   // autofill del navegador
+      input.value = '';
+      apply('');
+      return;
+    }
+    apply(input.value);
   });
   const dropAutofill = () => {
-    if (inputs.some((input) => input.dataset.userTyped === '1')) return;
-    inputs.forEach((input) => { input.value = ''; });
+    if (input.dataset.userTyped === '1') return;
+    input.value = '';
     if (state.jobsSearch) apply('');
   };
   setTimeout(dropAutofill, 300);
@@ -504,11 +575,6 @@ function setupFilters() {
 }
 
 function setupTopbar() {
-  $('refresh-all').addEventListener('click', async () => {
-    state.seriesLoaded = false;
-    await loadAll(false);
-    toast('Datos actualizados', 'ok');
-  });
   setupFilters();
   $('menu-password').addEventListener('click', () => openPassword(state.user.username, true));
   $('password-save').addEventListener('click', savePassword);
@@ -574,7 +640,7 @@ window.__backupcsr = {
   state,
   reload: () => loadAll(false),
   bootstrap,
-  version: '3',
+  version: '5',
 };
 
 (async function init() {
@@ -582,5 +648,6 @@ window.__backupcsr = {
   setupDataIcons();
   setupSidebar();
   setupTopbar();
+  renderAlerts();
   await bootstrap();
 })();

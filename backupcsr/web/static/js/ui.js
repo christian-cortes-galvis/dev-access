@@ -37,6 +37,7 @@ const STATUS_META = {
   TARDE: { pill: 'warn', label: 'TARDE' },
   FALLO: { pill: 'err', label: 'FALLÓ' },
   NUNCA: { pill: 'unknown', label: 'NUNCA' },
+  DESHABILITADA: { pill: 'unknown', label: 'DESHABILITADA' },
   INCIERTO: { pill: 'unknown', label: 'INCIERTO' },
 };
 

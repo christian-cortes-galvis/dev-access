@@ -321,7 +321,57 @@ a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
   --bs-alert-color: var(--bs-body-color);
 }
 .notice strong { color: var(--bs-primary); }
-.alert-list { display: flex; flex-direction: column; gap: 10px; }
+
+/* Menú de notificaciones de la barra superior (botón de campana). */
+.alerts-menu {
+  width: min(380px, calc(100vw - 24px)); padding: 0; overflow: hidden;
+  border-radius: 14px; box-shadow: var(--shadow);
+}
+.alerts-menu-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 11px 14px; border-bottom: 1px solid var(--bs-border-color);
+  background: var(--surface-2);
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted);
+}
+.alerts-menu-title { display: inline-flex; align-items: center; gap: 6px; }
+.alerts-menu-body {
+  max-height: min(70vh, 520px); overflow-y: auto;
+  padding: 10px; display: flex; flex-direction: column; gap: 8px;
+}
+.alerts-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 22px 10px; color: var(--muted); font-size: 13px; text-align: center;
+}
+.alerts-empty i { font-size: 24px; opacity: .55; }
+
+/* Notificación individual: tarjeta con icono, título/detalle y nivel. */
+.notif {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border: 1px solid var(--bs-border-color);
+  border-left: 3px solid var(--warn); border-radius: 10px;
+  background: var(--card);
+  transition: background .15s ease, border-color .15s ease;
+}
+.notif:hover { background: var(--accent-soft); }
+.notif-warn { border-left-color: var(--warn); }
+.notif-danger { border-left-color: var(--err); }
+.notif-icon {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: rgba(245, 158, 11, .14); color: var(--warn);
+}
+.notif-danger .notif-icon { background: rgba(239, 68, 68, .14); color: var(--err); }
+.notif-icon svg { width: 16px; height: 16px; }
+.notif-body { min-width: 0; }
+.notif-title { font-size: 13px; font-weight: 650; line-height: 1.25; }
+.notif-text { font-size: 12.5px; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
+.notif-level {
+  margin-left: auto; flex: 0 0 auto; align-self: flex-start;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--warn);
+}
+.notif-danger .notif-level { color: var(--err); }
 
 /* ------------------------------ disco de uso ------------------------------ */
 
@@ -331,6 +381,7 @@ a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
   border-left: 3px solid var(--warn);
   border-radius: 14px; padding: 12px 16px; box-shadow: var(--shadow);
 }
+.disk-card.disk-ok { border-left-color: var(--ok); }
 .disk-card.disk-danger { border-left-color: var(--err); }
 .disk-card.disk-off { border-left-color: var(--muted); }
 
@@ -379,9 +430,18 @@ a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
 .disk-card.disk-off .disk-key-other i { background: var(--muted); }
 .disk-key-free i { background: var(--bs-border-color); }
 .disk-note { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12.5px; }
+.disk-card.disk-ok .disk-note { color: var(--ok); }
 .disk-card.disk-warn .disk-note { color: var(--warn); }
 .disk-card.disk-danger .disk-note { color: var(--err); }
 .disk-card.disk-off .disk-note { color: var(--muted); }
+
+/* El disco NAS vive en una columna de 1/3: se estira con la fila y, si la
+   columna se angosta, se apila. */
+.chart-col-nas { container-type: inline-size; }
+#nas-info .disk-card { height: 100%; }
+@container (max-width: 320px) {
+  #nas-info .disk-card { flex-direction: column; align-items: flex-start; gap: 10px; }
+}
 
 @media (max-width: 575.98px) {
   .disk-card { flex-direction: column; align-items: flex-start; gap: 10px; }
@@ -429,7 +489,6 @@ svg.bars rect:hover { opacity: 1; }
 }
 .actionbar .badge { flex: 0 0 auto; }
 .table-search { max-width: 240px; }
-.topbar-search { max-width: 230px; }
 .section-title {
   font-size: 11.5px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .1em; color: var(--muted); margin: 4px 0 8px;
@@ -474,9 +533,25 @@ pre.log {
 .breadcrumb { --bs-breadcrumb-divider-color: var(--muted); margin-bottom: 0; }
 .breadcrumb a { cursor: pointer; }
 .pointer { cursor: pointer; }
-.theme-toggle { width: 34px; height: 34px; padding: 0; display: inline-grid; place-items: center; }
-.theme-toggle i { font-size: 15px; }
-.icon-btn { display: inline-flex; align-items: center; gap: 6px; }
+/* Botones de icono redondos de la barra superior (alertas y tema). */
+.icon-toggle {
+  position: relative; width: 36px; height: 36px; padding: 0; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50% !important;
+}
+.icon-toggle > i { font-size: 15px; line-height: 1; margin: 0 !important; }
+.icon-toggle.has-alerts { color: var(--warn); border-color: rgba(245, 158, 11, .35); }
+.icon-toggle.has-danger { color: var(--err); border-color: rgba(239, 68, 68, .35); }
+.icon-toggle-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; border: 2px solid var(--surface);
+  background: var(--warn); color: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 1;
+}
+.icon-toggle-badge.is-danger { background: var(--err); }
+.icon-toggle-badge[hidden] { display: none; }
 /* Espacio entre el icono Font Awesome y el texto del botón (icono solo: sin margen). */
 .btn > i:not(:only-child) { margin-right: .4rem; }
 .nav-item > i { width: 17px; text-align: center; font-size: 14px; }
