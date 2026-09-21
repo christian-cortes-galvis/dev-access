@@ -98,6 +98,18 @@
     cell.appendChild(metaSpan(st));
   }
 
+  function cardIcon(s) {
+    var img = document.createElement('img');
+    img.className = 'app-icon card-app';
+    img.src = '/favicons/' + s.icon;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.onerror = function () {
+      if (this.parentNode) this.parentNode.removeChild(this);
+    };
+    return img;
+  }
+
   function card(s) {
     var col = document.createElement('div');
     col.className = 'col';
@@ -107,15 +119,21 @@
     link.href = s.url;
     link.target = '_blank';
     link.rel = 'noopener';
-    link.setAttribute('data-tech', (s.tech || []).join(','));
+    var tech = (s.tech || []).join(',');
+    if (tech) link.setAttribute('data-tech', tech);
 
     var body = document.createElement('div');
     body.className = 'card-body';
 
+    var head = document.createElement('div');
+    head.className = 'card-head';
+    if (s.icon) head.appendChild(cardIcon(s));
+
     var title = document.createElement('h3');
     title.className = 'h6 card-title';
     title.textContent = s.name;
-    body.appendChild(title);
+    head.appendChild(title);
+    body.appendChild(head);
 
     if (s.note) {
       var note = document.createElement('p');
@@ -153,11 +171,30 @@
     });
   }
 
+  function isExcluded(s, exclude) {
+    var tech = s.tech || [];
+    for (var i = 0; i < exclude.length; i++) {
+      var token = exclude[i];
+      if (!token) continue;
+      if (s.slug === token || s.slug.indexOf(token + '-') === 0 || tech.indexOf(token) !== -1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function renderCardLists() {
     document.querySelectorAll('[data-cards]').forEach(function (box) {
       box.innerHTML = '';
-      byCategory(box.getAttribute('data-cards')).forEach(function (s) {
-        box.appendChild(card(s));
+      var exclude = (box.getAttribute('data-cards-exclude') || '')
+        .split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+      var seen = {};
+      box.getAttribute('data-cards').split(',').forEach(function (slug) {
+        byCategory(slug.trim()).forEach(function (s) {
+          if (seen[s.slug] || isExcluded(s, exclude)) return;
+          seen[s.slug] = true;
+          box.appendChild(card(s));
+        });
       });
     });
   }

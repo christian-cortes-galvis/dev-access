@@ -171,6 +171,17 @@ a.card:hover {
 .card .card-body { padding: 12px 14px 11px; }
 .card .card-title { margin-bottom: 3px; }
 
+/* Accesos directos: icono (favicon) junto al título */
+.card .card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 3px;
+}
+
+.card .card-head .card-title { margin-bottom: 0; }
+.card .card-app { margin-right: 0; flex: 0 0 auto; }
+
 .card .count {
   margin-top: .5rem;
   font-size: .66rem;

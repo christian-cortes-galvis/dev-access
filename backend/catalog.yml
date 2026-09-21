@@ -32,11 +32,18 @@ categories:
     card_tech: [codeigniter, php]
   - slug: spas
     title: SPAs y utilidades
-    description: Portal Pacientes (Angular), Centro de Apoyo (React), Bot Gomedisys y phpMyAdmin.
+    description: Portal Pacientes (Angular), Centro de Apoyo (React) y Bot Gomedisys.
     url: /spas.html
     note_header: Nota
     count_label: apps
     card_tech: [angular, react, python]
+  - slug: accesos-directos
+    title: Accesos directos
+    description: Enlaces directos a phpMyAdmin y al portal de copias.
+    url: /index.html
+    note_header: Destino
+    count_label: accesos
+    card_tech: [server]
 
 services:
   # ----------------------------- Infraestructura ---------------------------
@@ -91,14 +98,13 @@ services:
     note: "192.168.0.49:3000 &rarr; dashboards (Netdata/Prometheus)"
     sort: 55
   - slug: copias
-    name: Copias (backupcsr)
+    name: Copias NeoCortex
     category: infraestructura
     url: https://copias.cortexdev.win
     probe_url: https://copias.cortexdev.win/api/health
     accept: [200]
-    tech: [server]
-    badge: false
-    note: "Portal de copias backupcsr (192.168.0.49) &middot; distinto de PBS"
+    icon: favicon.png
+    note: "Portal de copias NeoCortex (backupcsr, 192.168.0.49) &middot; distinto de PBS"
     sort: 56
   - slug: netdata-backups
     name: "Netdata · proxmox-backups"
@@ -371,11 +377,13 @@ services:
     color: "#3776ab"
     note: "Python 3.12 + Playwright, puerto 6000"
     sort: 420
+
+  # --------------------------- Accesos directos ----------------------------
   - slug: pma
     name: phpMyAdmin
-    category: spas
+    category: accesos-directos
     url: https://pma.cortexdev.win
     tech: [phpmyadmin]
     badge: false
     note: "Administración de MySQL"
-    sort: 430
+    sort: 500

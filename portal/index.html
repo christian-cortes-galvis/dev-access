@@ -9,10 +9,10 @@
 	<link rel="apple-touch-icon" sizes="180x180" href="/favicons/cortexdev-180.png">
 	<script src="/theme.js?v=2"></script>
 	<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
-	<link rel="stylesheet" href="/style.css?v=4">
+	<link rel="stylesheet" href="/style.css?v=5">
 	<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
 	<script src="/app.js?v=3" defer></script>
-	<script src="/render.js?v=3" defer></script>
+	<script src="/render.js?v=5" defer></script>
 </head>
 
 <body>
@@ -70,15 +70,16 @@
 				<a class="card h-100 text-body" href="/spas.html" data-tech="angular,react,python" data-category-card="spas">
 					<div class="card-body">
 						<h3 class="h6 card-title">SPAs y utilidades</h3>
-						<p class="card-text small text-body-secondary">Portal Pacientes (Angular), Centro de Apoyo (React), Bot Gomedisys y phpMyAdmin.</p>
+						<p class="card-text small text-body-secondary">Portal Pacientes (Angular), Centro de Apoyo (React) y Bot Gomedisys.</p>
 						<div class="count">&mdash;</div>
 					</div>
 				</a>
 			</div>
 		</div>
 
-		<div class="section-title">Acceso rápido a infraestructura</div>
-		<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-3" data-cards="infraestructura"></div>
+		<div class="section-title">Accesos directos</div>
+		<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-4 g-3" data-cards="infraestructura,accesos-directos"
+			data-cards-exclude="netdata"></div>
 
 		<div class="alert notice mt-4" role="note">
 			<strong>Certificado:</strong> todos los servicios usan <code>*.cortexdev.win</code> con

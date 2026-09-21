@@ -148,9 +148,12 @@ a:hover { color: var(--bs-link-hover-color); text-decoration: underline; }
   width: 38px; height: 38px; flex: 0 0 auto;
   display: grid; place-items: center;
   border-radius: 10px;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff; font-weight: 800; letter-spacing: .5px;
 }
+.sidebar-brand .logo img,
+.login-brand .logo img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: inherit; }
 .sidebar-brand .brand-title { color: #fff; font-weight: 700; line-height: 1.1; }
 .sidebar-brand .brand-sub { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; opacity: .7; }
 
@@ -461,6 +464,7 @@ pre.log {
 .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 .login-brand .logo {
   width: 46px; height: 46px; display: grid; place-items: center; border-radius: 12px;
+  overflow: hidden;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff; font-weight: 800;
 }
