@@ -45,7 +45,8 @@ Antes de instalar, colocar los secretos (no versionados):
 
 ## Jobs y horarios
 
-`cron/backupcsr.cron` (hora Bogotá, `CRON_TZ`):
+`cron/backupcsr.cron` (hora Bogotá; el host **debe** estar en `America/Bogota`, ver
+"Zona horaria del anfitrión"):
 
 | Job | Origen | Destino NAS |
 |-----|--------|-------------|
@@ -62,6 +63,25 @@ usa `--delete`: si el origen remoto queda incompleto, el destino del NAS refleja
 
 `ruta56-bd` y `ruta56-web` comparten `/mnt/nas/ruta56`; por eso `ruta56-bd` excluye `storage`
 para no borrar lo que publica `ruta56-web`.
+
+### Zona horaria del anfitrión
+
+El cron de Ubuntu/Debian **no implementa `CRON_TZ`**: la cadena no existe en `/usr/sbin/cron`
+y la línea `CRON_TZ=` solo exporta la variable a los jobs, no programa en esa zona. Los
+horarios del cron se evalúan en la **zona del anfitrión**, así que `ubuntu-services` debe
+estar en `America/Bogota`:
+
+```bash
+sudo timedatectl set-timezone America/Bogota    # install.sh lo hace salvo SET_TIMEZONE=0
+sudo systemctl restart cron
+timedatectl                                       # Time zone: America/Bogota
+```
+
+Con el host en UTC los jobs `6-19` corren en realidad `01:00-14:00` Colombia: dejan de
+disparar por la tarde y hay que ejecutarlos a mano; además los logs quedan en hora UTC y el
+portal/validador los interpretan con el desfase (estado `TARDE`). `validar-copias.sh` avisa
+con un `ERROR` si detecta host y cron en zonas distintas. Si la zona del host no se puede
+cambiar, hay que reescribir las horas del cron (y del catálogo/BD) a la zona del host.
 
 ### Tareas deshabilitadas
 

@@ -9,7 +9,8 @@
 #   sudo INSTALL_KEYS=1 backupcsr/install.sh  # convierte keys/*.ppk a /etc/backupcsr/keys
 #
 # Variables opcionales: INSTALL_KEYS, INSTALL_NAS_FSTAB (0 para omitir el NAS),
-#                       RUN_USER, NAS_SERVER, NAS_SHARE, ALLOW_OTHER_HOST.
+#                       RUN_USER, NAS_SERVER, NAS_SHARE, ALLOW_OTHER_HOST,
+#                       SET_TIMEZONE (0 para no ajustar el host a America/Bogota).
 set -euo pipefail
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -151,10 +152,23 @@ fi
 echo "== 6/7 Cron y logrotate =="
 CURRENT_TZ="$(timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo desconocida)"
 echo "zona horaria del servidor: $CURRENT_TZ"
+# El cron de Ubuntu/Debian NO implementa CRON_TZ: la línea `CRON_TZ=` se ignora al
+# programar (solo se exporta a los jobs) y los horarios se evalúan en la zona del
+# anfitrión. Con el host en UTC, los jobs 6-19 correrían 01:00-14:00 en Colombia y
+# dejarían de disparar por la tarde (lo que obliga a ejecutarlos a mano). Por eso la
+# zona del host debe ser America/Bogota; se ajusta aquí salvo SET_TIMEZONE=0.
 if [ "$CURRENT_TZ" != "America/Bogota" ]; then
-	echo "ADVERTENCIA: los horarios del cron replican la hora local Colombia (UTC-5)."
-	echo "             Ajustar con: timedatectl set-timezone America/Bogota"
-	echo "             (el archivo de cron define CRON_TZ como respaldo, si el cron lo soporta)."
+	if [ "${SET_TIMEZONE:-1}" = "1" ]; then
+		echo "ajustando zona horaria del host a America/Bogota (SET_TIMEZONE=0 para omitir)"
+		timedatectl set-timezone America/Bogota
+		systemctl restart cron 2>/dev/null || true
+		echo "zona horaria ajustada: $(timedatectl show -p Timezone --value 2>/dev/null)"
+	else
+		echo "ADVERTENCIA: el host está en $CURRENT_TZ y los horarios del cron son hora" >&2
+		echo "             Colombia. Este cron NO honra CRON_TZ, así que los jobs se" >&2
+		echo "             dispararán en $CURRENT_TZ. Ajustar con:" >&2
+		echo "             timedatectl set-timezone America/Bogota" >&2
+	fi
 fi
 install -m 0644 "$SRC_DIR/cron/backupcsr.cron" /etc/cron.d/backupcsr
 install -m 0644 "$SRC_DIR/logrotate/backupcsr" /etc/logrotate.d/backupcsr

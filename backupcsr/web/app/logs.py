@@ -20,8 +20,20 @@ log = logging.getLogger("backupcsr-web")
 TZ = ZoneInfo(config.TIMEZONE)
 # Los jobs escriben sus logs con la hora local del host (no con CRON_TZ). Se
 # interpretan en esa zona y se convierten a TIMEZONE antes de comparar.
-HOST_TZ = datetime.now().astimezone().tzinfo
 TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[([^\]]+)\] (.*)$")
+
+
+def host_tz():
+    """Zona local del host, evaluada en cada llamada.
+
+    No cachear en una constante de módulo: el portal corre como servicio y un cambio
+    de zona (`timedatectl set-timezone`, o un host que arranca en otra zona) no reinicia
+    el proceso. Una captura al importar dejaría los logs nuevos mal interpretados
+    (offset viejo) hasta reiniciar `backupcsr-web`, con horas/duraciones y `TARDE`
+    incorrectos.
+    """
+    return datetime.now().astimezone().tzinfo
+
 TRANSFER_RE = re.compile(r"^Transferring file `(.+)'$")
 REMOVE_RE = re.compile(r"^Removing old file `(.+)'$")
 ERROR_HINT_RE = re.compile(r"fatal|error|failed|refused|denied|no such|timeout|retries", re.I)
@@ -34,7 +46,7 @@ def now() -> datetime:
 def parse_log_time(timestamp: str) -> datetime:
     """Hora de un log (zona del host) expresada en la zona configurada."""
     naive = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-    return naive.replace(tzinfo=HOST_TZ).astimezone(TZ)
+    return naive.replace(tzinfo=host_tz()).astimezone(TZ)
 
 
 def to_naive(dt: datetime) -> datetime:

@@ -2,8 +2,11 @@
 # Instalar con: install -m 0644 cron/backupcsr.cron /etc/cron.d/backupcsr
 #
 # Horarios (hora local Colombia, UTC-5): los jobs *-bd corren cada hora (6-19) y
-# los *-web 3 veces al día (6, 13 y 19). Si el servidor no está en America/Bogota,
-# CRON_TZ lo fuerza.
+# los *-web 3 veces al día (6, 13 y 19).
+# OJO: el cron de Ubuntu/Debian NO implementa CRON_TZ (la cadena no está en /usr/sbin/cron);
+# la línea CRON_TZ de abajo solo exporta la variable a los jobs. El anfitrión DEBE estar en
+# America/Bogota (timedatectl set-timezone America/Bogota) o los horarios se evalúan en la
+# zona del host y los jobs correrán a otra hora (con UTC, 01:00-14:00 Colombia).
 #
 # Los minutos van ESCALONADOS (02, 14, 20, 26, 38, 50) para no lanzar los 6 jobs a
 # la vez: este anfitrión tiene 4 vCPU y poca RAM, y seis mirrors simultáneos contra

@@ -90,6 +90,26 @@ check_cron_service() {
 	fi
 }
 
+# El cron de Ubuntu/Debian NO implementa CRON_TZ (la cadena no existe en /usr/sbin/cron):
+# `CRON_TZ=` se ignora al programar y los horarios se evalúan en la zona del anfitrión.
+# Con el host en UTC, los jobs 6-19 corren 01:00-14:00 en Colombia y no disparan por la
+# tarde; el log del job queda en hora del host y el validador/portal lo interpretan mal.
+check_timezone() {
+	local host_tz
+	host_tz="$(timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || true)"
+	if [ -z "$host_tz" ]; then
+		warn "no se pudo determinar la zona horaria del host"
+		return
+	fi
+	if [ "$host_tz" = "$CRON_TZ_NAME" ]; then
+		ok "zona horaria del host $host_tz coincide con $CRON_TZ_NAME"
+	elif [ -n "$(grep -a CRON_TZ /usr/sbin/cron 2>/dev/null)" ]; then
+		ok "host en $host_tz; este cron soporta CRON_TZ ($CRON_TZ_NAME)"
+	else
+		err "host en $host_tz y este cron NO honra CRON_TZ: los horarios se disparan en $host_tz, no en $CRON_TZ_NAME (ajustar: timedatectl set-timezone $CRON_TZ_NAME)"
+	fi
+}
+
 check_cron_file() {
 	if [ ! -f "$CRON_FILE" ]; then
 		err "no existe $CRON_FILE (ejecutar install.sh)"
@@ -472,6 +492,7 @@ if [ ! -f "$CRON_FILE" ]; then
 else
 	say "== Precondiciones =="
 	check_cron_service
+	check_timezone
 	check_cron_file
 	check_jobs
 	check_secret_perms "$CRED_FILE" "credentials.env"

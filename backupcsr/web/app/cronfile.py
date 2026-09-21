@@ -21,6 +21,8 @@ JOB_RE = re.compile(r"/jobs/([A-Za-z0-9_.-]+)\.sh")
 HEADER = [
     "# Copias de seguridad (backupcsr) - ubuntu-services.",
     "# Generado por backupcsr-web. No editar a mano: se sobrescribe.",
+    "# El cron NO honra CRON_TZ: los horarios se evaluan en la zona del host, que debe ser",
+    "# __TZ__ (validar-copias.sh lo verifica). La linea CRON_TZ solo exporta el env.",
     "SHELL=/bin/bash",
     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
     "LANG=C.UTF-8",
