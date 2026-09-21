@@ -18,6 +18,9 @@ from . import config, db
 log = logging.getLogger("backupcsr-web")
 
 TZ = ZoneInfo(config.TIMEZONE)
+# Los jobs escriben sus logs con la hora local del host (no con CRON_TZ). Se
+# interpretan en esa zona y se convierten a TIMEZONE antes de comparar.
+HOST_TZ = datetime.now().astimezone().tzinfo
 TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[([^\]]+)\] (.*)$")
 TRANSFER_RE = re.compile(r"^Transferring file `(.+)'$")
 REMOVE_RE = re.compile(r"^Removing old file `(.+)'$")
@@ -26,6 +29,12 @@ ERROR_HINT_RE = re.compile(r"fatal|error|failed|refused|denied|no such|timeout|r
 
 def now() -> datetime:
     return datetime.now(TZ)
+
+
+def parse_log_time(timestamp: str) -> datetime:
+    """Hora de un log (zona del host) expresada en la zona configurada."""
+    naive = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+    return naive.replace(tzinfo=HOST_TZ).astimezone(TZ)
 
 
 def to_naive(dt: datetime) -> datetime:
@@ -84,7 +93,7 @@ def parse_slug(slug: str) -> list[dict]:
         match = TS_RE.match(line)
         if match:
             timestamp, _job, message = match.groups()
-            started = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S").replace(tzinfo=TZ)
+            started = parse_log_time(timestamp)
             if message.startswith("=== inicio "):
                 close("INCIERTO")
                 current = {
@@ -209,6 +218,19 @@ def next_run(schedule: dict, reference: datetime | None = None) -> datetime | No
     return None
 
 
+def next_runs(schedule: dict, count: int = 5, reference: datetime | None = None) -> list[datetime]:
+    """Próximas `count` ejecuciones del horario (para previsualizar cambios de cron)."""
+    out: list[datetime] = []
+    cursor = reference or now()
+    for _ in range(max(1, min(int(count), 50))):
+        nxt = next_run(schedule, cursor)
+        if nxt is None:
+            break
+        out.append(nxt)
+        cursor = nxt + timedelta(seconds=1)
+    return out
+
+
 def evaluate(run: dict | None, schedule: dict, reference: datetime, running: bool,
              grace_min: int | None = None) -> tuple[str, str]:
     """Estado y detalle de un job según su última corrida y el horario."""
@@ -264,7 +286,10 @@ def _duration(run: dict) -> int | None:
     end = run.get("finished_at") or now()
     if isinstance(end, datetime) and end.tzinfo is None:
         end = from_naive(end)
-    return int((end - from_naive(run["started_at"])).total_seconds())
+    seconds = int((end - from_naive(run["started_at"])).total_seconds())
+    # Negativo = el log va por delante del reloj del portal (desfase de TZ):
+    # preferimos "sin dato" a mostrar una duración imposible.
+    return seconds if seconds >= 0 else None
 
 
 def _db_status(run: dict) -> str:

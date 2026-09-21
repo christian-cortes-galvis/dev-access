@@ -27,6 +27,14 @@ def load_catalog() -> dict:
         return yaml.safe_load(handle) or {"settings": {}, "jobs": []}
 
 
+def _size_exclude(item: dict) -> list[str]:
+    """Patrones (nombres de hijo directo del destino) a excluir del cálculo de tamaño."""
+    raw = item.get("size_exclude") or []
+    if isinstance(raw, str):
+        raw = raw.replace(",", " ").split()
+    return [str(value).strip().strip("/") for value in raw if str(value).strip()]
+
+
 def catalog_jobs() -> list[dict]:
     """Jobs del YAML normalizados a la forma de la tabla `jobs` (sin BD)."""
     catalog = load_catalog()
@@ -50,6 +58,7 @@ def catalog_jobs() -> list[dict]:
                 "cron_month": str(cron.get("month", "*")),
                 "cron_dow": str(cron.get("dow", "*")),
                 "sort": int(item.get("sort", 100)),
+                "size_exclude": _size_exclude(item),
             }
         )
     return out

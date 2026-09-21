@@ -305,9 +305,15 @@ secretos y corte desde `ubuntu-docker`) en [`backupcsr/README.md`](backupcsr/REA
 
 ### Portal de administración (`copias.cortexdev.win`)
 
-`backupcsr/web/` añade un portal web (Bootstrap 5) para ver el estado, ejecutar jobs, consultar el
-historial y los archivos de cada copia, y —con la gestión activada— editar el horario. La API corre
-nativa por systemd en `127.0.0.1:8089` (necesita root para el NAS/logs/jobs) y nginx la publica:
+`backupcsr/web/` añade un portal web (Bootstrap 5, app-shell con barra lateral) para ver el estado,
+el **tamaño (GB) almacenado por tarea** con su tendencia, ejecutar/reintentar jobs, consultar el
+historial (con export CSV/JSON), navegar los archivos de cada copia, y —con la gestión activada—
+editar el horario con presets y previsualización. Incluye usuarios (`admin`/`viewer`), auditoría y
+alertas (jobs vencidos/fallidos, NAS lleno). El panel usa **una sola barra de acciones** con
+selección de fila (estilo DataTables *Buttons*) e iconos **Font Awesome 6.5.2** vendoreados; los
+gráficos son SVG propios embebidos y el tema es claro por defecto con toggle oscuro (sin CDN ni
+build). La API corre nativa por systemd en `127.0.0.1:8089` (necesita root para el NAS/logs/jobs) y
+nginx la publica:
 
 ```bash
 sudo backupcsr/web/install.sh     # venv, systemd, esquema y admin

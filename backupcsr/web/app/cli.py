@@ -5,6 +5,8 @@ Uso (dentro del venv, en /opt/backupcsr/web):
   venv/bin/python -m app.cli apply-schema
   venv/bin/python -m app.cli sync-jobs
   venv/bin/python -m app.cli render-cron [--apply]
+  venv/bin/python -m app.cli snapshot-sizes
+  venv/bin/python -m app.cli resync-runs [--dry-run]
   venv/bin/python -m app.cli status
 """
 from __future__ import annotations
@@ -14,7 +16,7 @@ import getpass
 import json
 import sys
 
-from . import auth, catalog, config, cronfile, db
+from . import auth, catalog, config, cronfile, db, sizes
 
 
 def cmd_create_admin(args: argparse.Namespace) -> int:
@@ -91,6 +93,55 @@ def cmd_status(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_snapshot_sizes(_args: argparse.Namespace) -> int:
+    if not db.available():
+        print(f"ERROR: MySQL no disponible ({db.last_error()})", file=sys.stderr)
+        return 2
+    if not config.NAS_MOUNT.exists():
+        print(f"ERROR: el NAS no está montado en {config.NAS_MOUNT}", file=sys.stderr)
+        return 2
+    saved = 0
+    for job in catalog.catalog_jobs():
+        size = sizes.job_size(job, force=True)
+        if size.get("bytes") is None:
+            print(f"  {job['slug']}: sin datos ({size.get('error')})")
+            continue
+        row = db.query("SELECT id FROM jobs WHERE slug = %s", (job["slug"],), one=True)
+        if row and sizes.save_snapshot(row["id"], size):
+            saved += 1
+        print(f"  {job['slug']}: {size['bytes']} bytes en {size['files']} archivos")
+    print(f"snapshots guardados: {saved}")
+    return 0
+
+
+def cmd_resync_runs(args: argparse.Namespace) -> int:
+    """Re-deriva `runs`/`run_files` desde los logs.
+
+    Necesario tras corregir la zona horaria con que se interpretan los logs: las
+    corridas ya guardadas quedan con horas desplazadas y se duplicarían.
+    """
+    if not db.available():
+        print(f"ERROR: MySQL no disponible ({db.last_error()})", file=sys.stderr)
+        return 2
+    from . import api, logs
+
+    jobs = api.effective_jobs()
+    parsed = {job["slug"]: logs.parse_slug(job["slug"]) for job in jobs}
+    total = sum(len(runs) for runs in parsed.values())
+    if args.dry_run:
+        for slug, runs in parsed.items():
+            print(f"  {slug}: {len(runs)} corridas en el log")
+        print(f"DRY-RUN: se borrarían las corridas de la BD y se re-insertarían {total} desde los logs")
+        return 0
+    db.execute("DELETE FROM run_files")
+    deleted = db.execute("DELETE FROM runs")
+    db.execute("UPDATE size_snapshots SET run_id = NULL WHERE run_id IS NOT NULL")
+    for job in jobs:
+        logs.store_runs(job, parsed[job["slug"]])
+    print(f"corridas borradas: {deleted}; re-sincronizadas desde logs: {total}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Utilidades de backupcsr-web")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -110,6 +161,12 @@ def build_parser() -> argparse.ArgumentParser:
     render.set_defaults(func=cmd_render_cron)
 
     sub.add_parser("status", help="estado de conexión/rutas").set_defaults(func=cmd_status)
+    sub.add_parser("snapshot-sizes", help="mide y guarda el tamaño de cada job").set_defaults(
+        func=cmd_snapshot_sizes
+    )
+    resync = sub.add_parser("resync-runs", help="re-deriva las corridas desde los logs")
+    resync.add_argument("--dry-run", action="store_true", help="solo muestra lo que haría")
+    resync.set_defaults(func=cmd_resync_runs)
     return parser
 
 

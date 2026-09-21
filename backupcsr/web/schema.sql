@@ -64,6 +64,21 @@ CREATE TABLE IF NOT EXISTS run_files (
   CONSTRAINT fk_run_files_run FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS size_snapshots (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  job_id INT UNSIGNED NOT NULL,
+  taken_at DATETIME NOT NULL,
+  bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  files INT UNSIGNED NOT NULL DEFAULT 0,
+  run_id BIGINT UNSIGNED NULL,
+  truncated TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_size_job_taken (job_id, taken_at),
+  KEY idx_size_taken (taken_at),
+  KEY idx_size_run (run_id),
+  CONSTRAINT fk_size_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(64) NOT NULL,

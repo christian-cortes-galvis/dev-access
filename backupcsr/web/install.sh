@@ -57,6 +57,8 @@ for item in app static sql jobs.yml schema.sql requirements.txt; do
 done
 # Quita __pycache__ que pudiera venir del repo.
 find "$WEB_DIR/app" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+# Restos del frontend monolítico anterior (el nuevo vive en static/js/).
+rm -f "$WEB_DIR/static/app.js" "$WEB_DIR/static/api.js"
 
 echo "== 3/6 Entorno virtual y dependencias =="
 if [ ! -x "$WEB_DIR/venv/bin/python" ]; then
@@ -82,6 +84,26 @@ sed -e "s|__WEB_DIR__|$WEB_DIR|g" "$SRC_DIR/systemd/backupcsr-web.service.templa
 chmod 0644 "$UNIT"
 systemctl daemon-reload
 systemctl enable backupcsr-web.service >/dev/null 2>&1 || true
+
+echo "== 5b/6 Permisos de los lockfiles de jobs =="
+# cron crea /run/lock/backupcsr-*.lock como root:root 0644. El portal abre esos
+# ficheros en modo append para tomar el mismo flock que cron: si el servicio no
+# corre como root, sin lectura+escritura falla con 500 en /api/summary y /api/jobs.
+SVC_USER="$(sed -n 's/^User=//p' "$UNIT" | head -n1)"
+if [ -n "$SVC_USER" ] && [ "$SVC_USER" != "root" ]; then
+	SVC_GROUP="$(id -gn "$SVC_USER" 2>/dev/null || echo "$SVC_USER")"
+	FIXED=0
+	for lock in /run/lock/backupcsr-*.lock; do
+		[ -e "$lock" ] || continue
+		chgrp "$SVC_GROUP" "$lock" 2>/dev/null || true
+		chmod 0664 "$lock" 2>/dev/null || true
+		FIXED=$((FIXED + 1))
+	done
+	echo "servicio como '$SVC_USER'; lockfiles legibles para $SVC_GROUP (0664): $FIXED"
+	echo "nota: si cron los recrea como root, vuelve a ejecutar este paso."
+else
+	echo "el servicio corre como root; no requiere ajustes"
+fi
 
 echo "== 6/6 Base de datos (esquema y admin) =="
 if [ "$DO_DB" = "1" ]; then

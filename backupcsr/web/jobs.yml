@@ -45,6 +45,10 @@ jobs:
     source: taskManager/ruta56
     dest_rel: ruta56
     lockfile: /run/lock/backupcsr-ruta56-bd.lock
+    # ruta56-web escribe en ruta56/storage/app, que vive dentro de `ruta56`.
+    # Se excluye `storage` al medir este job para que el total no cuente dos veces.
+    size_exclude:
+      - storage
     cron:
       minute: "20"
       hour: "6-19"

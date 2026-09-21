@@ -5,153 +5,357 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>CortexDev · Copias de seguridad</title>
-	<script src="/theme.js?v=1"></script>
+	<script src="/theme.js?v=2"></script>
 	<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
-	<link rel="stylesheet" href="/style.css?v=1">
+	<link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+	<link rel="stylesheet" href="/style.css?v=3">
 	<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
-	<script src="/api.js?v=1" defer></script>
-	<script src="/app.js?v=1" defer></script>
+	<script type="module" src="/js/shell.js?v=3"></script>
 </head>
 
 <body>
-	<div class="wrap">
+	<div class="app">
 
-		<header class="top d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-			<div class="brand d-flex align-items-center gap-3 min-w-0">
+		<aside class="app-sidebar" id="app-sidebar">
+			<div class="sidebar-brand">
 				<div class="logo">BC</div>
 				<div>
-					<h1 class="h4 mb-0">Copias de seguridad</h1>
-					<p class="mb-0 small text-body-secondary">
-						Administración de <code>backupcsr</code> en ubuntu-services &middot; <code>copias.cortexdev.win</code>
+					<div class="brand-title">Copias de seguridad</div>
+					<div class="brand-sub">CortexDev</div>
+				</div>
+			</div>
+			<nav class="sidebar-nav" id="sidebar-nav">
+				<div class="nav-section">Operación</div>
+				<a class="nav-item" href="#/panel" data-view="panel"><i class="fa-solid fa-gauge-high"></i><span>Panel</span></a>
+				<a class="nav-item" href="#/historial" data-view="historial"><i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span></a>
+				<a class="nav-item" href="#/archivos" data-view="archivos"><i class="fa-solid fa-folder-tree"></i><span>Archivos</span></a>
+				<a class="nav-item" href="#/programacion" data-view="programacion"><i class="fa-solid fa-calendar-days"></i><span>Programación</span></a>
+				<div class="nav-section" data-admin>Administración</div>
+				<a class="nav-item" href="#/usuarios" data-view="usuarios" data-admin><i class="fa-solid fa-users-gear"></i><span>Usuarios</span></a>
+				<a class="nav-item" href="#/auditoria" data-view="auditoria" data-admin><i class="fa-solid fa-clipboard-list"></i><span>Auditoría</span></a>
+			</nav>
+			<div class="sidebar-foot">
+				<span><span class="dot" id="sb-db"></span>MySQL <span id="sb-db-text">—</span></span>
+				<span><span class="dot" id="sb-nas"></span>NAS <span id="sb-nas-text">—</span></span>
+				<span class="muted" id="sb-updated">—</span>
+			</div>
+		</aside>
+		<div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+
+		<div class="app-main">
+			<header class="app-topbar">
+				<button type="button" class="btn btn-sm btn-outline-secondary d-lg-none" id="sidebar-toggle"
+					aria-label="Menú"></button>
+				<nav class="breadcrumbs" id="breadcrumbs"></nav>
+				<div class="topbar-actions">
+					<div class="input-group input-group-sm d-none d-md-flex topbar-search">
+						<span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+						<input id="global-search" class="form-control" name="job-filter" type="search" readonly
+							placeholder="Buscar job…" aria-label="Buscar job" autocomplete="off"
+							autocapitalize="off" autocorrect="off" spellcheck="false" data-form-type="other"
+							data-lpignore="true">
+					</div>
+					<span class="conn-pill hide-sm" id="conn-db"><span class="dot"></span>MySQL</span>
+					<span class="conn-pill hide-sm" id="conn-nas"><span class="dot"></span>NAS</span>
+					<button type="button" class="btn btn-sm btn-outline-secondary icon-btn" id="refresh-all">
+						<i class="fa-solid fa-rotate"></i><span>Actualizar</span></button>
+					<button type="button" class="btn btn-outline-secondary rounded-circle theme-toggle" id="theme-toggle"></button>
+					<div class="dropdown">
+						<button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+							data-bs-toggle="dropdown" aria-expanded="false" id="user-name">—</button>
+						<ul class="dropdown-menu dropdown-menu-end">
+							<li><button class="dropdown-item" type="button" id="menu-password">Cambiar mi contraseña</button></li>
+							<li><hr class="dropdown-divider"></li>
+							<li><button class="dropdown-item" type="button" id="logout-btn">Salir</button></li>
+						</ul>
+					</div>
+				</div>
+			</header>
+
+			<div class="app-content">
+				<div id="banner" class="alert alert-warning banner" hidden></div>
+
+				<!-- ------------------------------ Panel ------------------------------ -->
+				<section id="view-panel" class="view">
+					<div class="row row-cols-2 row-cols-md-3 row-cols-xl-6 g-3 mb-3" id="kpi-row"></div>
+					<div id="alert-box" class="alert-list mb-3" hidden></div>
+					<div class="row g-3 mb-3">
+						<div class="col-lg-8">
+							<div class="card chart-card h-100">
+								<div class="card-body">
+									<div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+										<span class="chart-title">Tendencia de tamaño almacenado</span>
+										<select id="chart-job" class="form-select form-select-sm" style="max-width:240px"></select>
+									</div>
+									<div id="chart-size"></div>
+								</div>
+							</div>
+						</div>
+						<div class="col-lg-4">
+							<div class="card chart-card h-100">
+								<div class="card-body">
+									<div class="chart-title mb-2">Duración última ejecución</div>
+									<div id="chart-duration"></div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="d-flex align-items-center justify-content-between mb-2 gap-2 flex-wrap">
+						<h2 class="h6 mb-0">Copias programadas</h2>
+						<div class="d-flex align-items-center gap-2">
+							<div class="input-group input-group-sm table-search">
+								<span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+								<input id="jobs-search" class="form-control" name="jobs-filter" type="search" readonly
+									placeholder="Filtrar tareas…" aria-label="Filtrar tareas" autocomplete="off"
+									autocapitalize="off" autocorrect="off" spellcheck="false" data-form-type="other"
+									data-lpignore="true">
+							</div>
+							<span class="badge rounded-pill pill-brand" id="jobs-count">0</span>
+						</div>
+					</div>
+					<div class="actionbar mb-2" id="jobs-actionbar">
+						<span class="small text-body-secondary" id="jobs-selected">
+							<i class="fa-solid fa-hand-pointer me-1"></i>Selecciona una fila para operar
+						</span>
+						<div class="btn-group btn-group-sm ms-auto flex-wrap" role="group" aria-label="Acciones de la tarea seleccionada">
+							<button type="button" class="btn btn-outline-primary" data-action="run" disabled>
+								<i class="fa-solid fa-play"></i><span>Ejecutar</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-action="dry" disabled>
+								<i class="fa-solid fa-flask"></i><span>Dry-run</span></button>
+							<button type="button" class="btn btn-outline-warning" data-action="retry" disabled>
+								<i class="fa-solid fa-rotate-right"></i><span>Reintentar</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-action="log" disabled>
+								<i class="fa-solid fa-file-lines"></i><span>Log</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-action="history" disabled>
+								<i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-action="files" disabled>
+								<i class="fa-solid fa-folder-open"></i><span>Archivos</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-action="schedule" disabled>
+								<i class="fa-solid fa-calendar-days"></i><span>Horario</span></button>
+							<button type="button" class="btn btn-outline-success" data-action="toggle" disabled>
+								<i class="fa-solid fa-toggle-on"></i><span>Habilitar</span></button>
+						</div>
+					</div>
+					<div class="table-shell table-responsive">
+						<table class="table table-hover align-middle" id="jobs-table">
+							<thead>
+								<tr>
+									<th>Job</th>
+									<th>Estado</th>
+									<th>Tamaño</th>
+									<th>Última</th>
+									<th>Próxima</th>
+									<th>Destino</th>
+									<th>Programación</th>
+								</tr>
+							</thead>
+							<tbody id="jobs-body"></tbody>
+						</table>
+					</div>
+					<p class="small text-body-secondary mt-2 mb-0">
+						Haz clic en una fila para seleccionarla (no cambia de vista) y usa los botones de la
+						barra superior: el log se abre con <em>Log</em>. <kbd>Enter</kbd> también selecciona;
+						<em>Actualizar</em> no pierde la selección.
 					</p>
-				</div>
-			</div>
-			<div class="d-flex align-items-center gap-2">
-				<span id="user-name" class="small text-body-secondary"></span>
-				<button id="theme-toggle" type="button" class="btn btn-outline-secondary rounded-circle theme-toggle"></button>
-				<button id="logout-btn" type="button" class="btn btn-sm btn-outline-secondary">Salir</button>
-			</div>
-		</header>
+				</section>
 
-		<ul class="nav nav-tabs mb-3" id="main-tabs">
-			<li class="nav-item"><button class="nav-link active" type="button" data-tab="dashboard">Panel</button></li>
-			<li class="nav-item"><button class="nav-link" type="button" data-tab="historial">Historial</button></li>
-			<li class="nav-item"><button class="nav-link" type="button" data-tab="archivos">Archivos</button></li>
-			<li class="nav-item"><button class="nav-link" type="button" data-tab="cron">Programación</button></li>
-		</ul>
+				<!-- ---------------------------- Historial ---------------------------- -->
+				<section id="view-historial" class="view" hidden>
+					<form id="hist-filter" class="toolbar" autocomplete="off">
+						<div>
+							<label class="form-label small mb-1" for="hist-job">Job</label>
+							<select id="hist-job" class="form-select form-select-sm">
+								<option value="">Todos</option>
+							</select>
+						</div>
+						<div>
+							<label class="form-label small mb-1" for="hist-status">Estado</label>
+							<select id="hist-status" class="form-select form-select-sm">
+								<option value="">Todos</option>
+								<option value="OK">OK</option>
+								<option value="EN_CURSO">EN CURSO</option>
+								<option value="FALLO">FALLÓ</option>
+								<option value="INCIERTO">INCIERTO</option>
+							</select>
+						</div>
+						<div>
+							<label class="form-label small mb-1" for="hist-desde">Desde</label>
+							<input type="date" id="hist-desde" class="form-control form-control-sm">
+						</div>
+						<div>
+							<label class="form-label small mb-1" for="hist-hasta">Hasta</label>
+							<input type="date" id="hist-hasta" class="form-control form-control-sm">
+						</div>
+						<button type="submit" class="btn btn-sm btn-primary">
+							<i class="fa-solid fa-filter"></i><span>Filtrar</span></button>
+						<button type="button" class="btn btn-sm btn-outline-secondary" id="hist-refresh">
+							<i class="fa-solid fa-rotate"></i><span>Actualizar</span></button>
+						<div class="ms-auto d-flex gap-2">
+							<button type="button" class="btn btn-sm btn-outline-secondary" id="hist-export-csv">
+								<i class="fa-solid fa-file-csv"></i><span>Exportar CSV</span></button>
+							<button type="button" class="btn btn-sm btn-outline-secondary" id="hist-export-json">
+								<i class="fa-solid fa-file-code"></i><span>Exportar JSON</span></button>
+						</div>
+					</form>
+					<div class="table-shell table-responsive">
+						<table class="table table-hover align-middle">
+							<thead>
+								<tr>
+									<th>Job</th>
+									<th>Inicio</th>
+									<th>Fin</th>
+									<th>Estado</th>
+									<th>Duración</th>
+									<th>Tamaño</th>
+									<th>Transf. / Borrados</th>
+									<th>Modo</th>
+								</tr>
+							</thead>
+							<tbody id="hist-body"></tbody>
+						</table>
+					</div>
+					<p class="small text-body-secondary mt-2">Haz clic en una fila para ver el detalle, los archivos y el log.</p>
+				</section>
 
-		<div id="banner" class="alert alert-warning banner" hidden></div>
+				<!-- ---------------------------- Archivos ----------------------------- -->
+				<section id="view-archivos" class="view" hidden>
+					<div class="toolbar">
+						<div>
+							<label class="form-label small mb-1" for="files-job">Job</label>
+							<select id="files-job" class="form-select form-select-sm"></select>
+						</div>
+						<div class="small text-body-secondary" id="files-size">—</div>
+						<button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="files-refresh-size">
+							<i class="fa-solid fa-ruler-combined"></i><span>Medir tamaño</span></button>
+					</div>
+					<nav class="breadcrumb mono" id="files-breadcrumb"></nav>
+					<div class="table-shell table-responsive">
+						<table class="table table-hover align-middle">
+							<thead>
+								<tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th><th>Modificado</th></tr>
+							</thead>
+							<tbody id="files-body"></tbody>
+						</table>
+					</div>
+				</section>
 
-		<!-- ------------------------------ Panel ------------------------------ -->
-		<section id="tab-dashboard">
-			<div class="row row-cols-2 row-cols-md-3 row-cols-lg-6 g-3 mb-4" id="stats"></div>
+				<!-- -------------------------- Programación --------------------------- -->
+				<section id="view-programacion" class="view" hidden>
+					<div class="alert alert-warning d-flex align-items-start gap-2" id="cron-readonly" hidden>
+						<i class="fa-solid fa-lock mt-1"></i>
+						<div>
+							La gestión de horarios está <strong>desactivada</strong>: el portal solo puede leer el cron.
+							Para editar tareas, pon <code>BACKUP_MANAGE_CRON=1</code> en
+							<code>/etc/backupcsr/web.env</code> y reinicia <code>backupcsr-web</code>.
+						</div>
+					</div>
+					<div class="card mb-3">
+						<div class="card-body">
+							<p class="mb-1"><i class="fa-solid fa-gears me-1"></i>Gestión de cron: <strong id="cron-manage">—</strong></p>
+							<p class="mb-1"><i class="fa-regular fa-file-lines me-1"></i>Archivo: <code id="cron-path">—</code></p>
+							<p class="mb-1"><i class="fa-solid fa-equals me-1"></i>¿El archivo actual coincide con el render? <strong id="cron-equal">—</strong></p>
+							<p class="mb-0 small text-body-secondary">
+								Con la gestión activada, habilitar/deshabilitar o cambiar el horario reescribe
+								<code>/etc/cron.d/backupcsr</code> (con backup). Usa <em>Horario</em> en la tabla.
+							</p>
+						</div>
+					</div>
+					<div class="table-shell table-responsive mb-3">
+						<table class="table table-hover align-middle">
+							<thead>
+								<tr><th>Job</th><th>Programación</th><th>Estado</th><th>Acciones</th></tr>
+							</thead>
+							<tbody id="cron-body"></tbody>
+						</table>
+					</div>
+					<h3 class="section-title">Diferencias</h3>
+					<pre class="log" id="cron-diff"></pre>
+					<h3 class="section-title mt-3">Render propuesto</h3>
+					<pre class="log" id="cron-render"></pre>
+				</section>
 
-			<div class="d-flex align-items-center justify-content-between mb-2">
-				<h2 class="h5 mb-0">Copias programadas</h2>
-				<button id="jobs-refresh" type="button" class="btn btn-sm btn-outline-secondary">Actualizar</button>
+				<!-- ---------------------------- Usuarios ----------------------------- -->
+				<section id="view-usuarios" class="view" hidden>
+					<div class="card mb-3">
+						<div class="card-body">
+							<h3 class="h6 mb-3">Nuevo usuario</h3>
+							<form id="user-form" class="row g-2 align-items-end" autocomplete="off">
+								<div class="col-md-3">
+									<label class="form-label small mb-1" for="user-new-name">Usuario</label>
+									<input class="form-control form-control-sm mono" id="user-new-name" autocomplete="off" required>
+								</div>
+								<div class="col-md-3">
+									<label class="form-label small mb-1" for="user-new-pass">Contraseña</label>
+									<input type="password" class="form-control form-control-sm" id="user-new-pass"
+										autocomplete="new-password" required>
+								</div>
+								<div class="col-md-2">
+									<label class="form-label small mb-1" for="user-new-role">Rol</label>
+									<select class="form-select form-select-sm" id="user-new-role">
+										<option value="viewer">viewer</option>
+										<option value="admin">admin</option>
+									</select>
+								</div>
+								<div class="col-md-2">
+									<button type="submit" class="btn btn-sm btn-primary w-100">
+										<i class="fa-solid fa-user-plus"></i><span>Crear</span></button>
+								</div>
+							</form>
+						</div>
+					</div>
+					<div class="table-shell table-responsive">
+						<table class="table table-hover align-middle">
+							<thead>
+								<tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Creado</th><th>Acciones</th></tr>
+							</thead>
+							<tbody id="users-body"></tbody>
+						</table>
+					</div>
+				</section>
+
+				<!-- ---------------------------- Auditoría ---------------------------- -->
+				<section id="view-auditoria" class="view" hidden>
+					<form id="audit-filter" class="toolbar" autocomplete="off">
+						<div>
+							<label class="form-label small mb-1" for="audit-user">Usuario</label>
+							<input class="form-control form-control-sm mono" id="audit-user" name="audit-user"
+								placeholder="todos" autocomplete="off" spellcheck="false" data-form-type="other">
+						</div>
+						<div>
+							<label class="form-label small mb-1" for="audit-action">Acción</label>
+							<select class="form-select form-select-sm" id="audit-action">
+								<option value="">Todas</option>
+								<option value="run">run</option>
+								<option value="run-dry">run-dry</option>
+								<option value="run-retry">run-retry</option>
+								<option value="update-job">update-job</option>
+								<option value="reset-schedule">reset-schedule</option>
+								<option value="size-refresh">size-refresh</option>
+								<option value="user-create">user-create</option>
+								<option value="user-update">user-update</option>
+								<option value="user-password">user-password</option>
+								<option value="self-password">self-password</option>
+							</select>
+						</div>
+						<button type="submit" class="btn btn-sm btn-primary">
+							<i class="fa-solid fa-filter"></i><span>Filtrar</span></button>
+						<button type="button" class="btn btn-sm btn-outline-secondary" id="audit-refresh">
+							<i class="fa-solid fa-rotate"></i><span>Actualizar</span></button>
+					</form>
+					<div class="table-shell table-responsive">
+						<table class="table table-hover align-middle">
+							<thead>
+								<tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Job</th><th>Detalle</th></tr>
+							</thead>
+							<tbody id="audit-body"></tbody>
+						</table>
+					</div>
+				</section>
 			</div>
-			<div class="table-responsive">
-				<table class="table table-hover align-middle">
-					<thead>
-						<tr>
-							<th>Job</th>
-							<th>Estado</th>
-							<th>Última</th>
-							<th>Próxima</th>
-							<th>Destino</th>
-							<th>Programación</th>
-							<th>Acciones</th>
-						</tr>
-					</thead>
-					<tbody id="jobs-body"></tbody>
-				</table>
-			</div>
-		</section>
-
-		<!-- ---------------------------- Historial ---------------------------- -->
-		<section id="tab-historial" hidden>
-			<form id="hist-filter" class="row g-2 align-items-end mb-3">
-				<div class="col-auto">
-					<label class="form-label small mb-1" for="hist-job">Job</label>
-					<select id="hist-job" class="form-select form-select-sm">
-						<option value="">Todos</option>
-					</select>
-				</div>
-				<div class="col-auto">
-					<label class="form-label small mb-1" for="hist-status">Estado</label>
-					<select id="hist-status" class="form-select form-select-sm">
-						<option value="">Todos</option>
-						<option value="OK">OK</option>
-						<option value="EN_CURSO">EN CURSO</option>
-						<option value="FALLO">FALLÓ</option>
-						<option value="INCIERTO">INCIERTO</option>
-					</select>
-				</div>
-				<div class="col-auto">
-					<button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
-				</div>
-				<div class="col-auto">
-					<button id="hist-refresh" type="button" class="btn btn-sm btn-outline-secondary">Actualizar</button>
-				</div>
-			</form>
-			<div class="table-responsive">
-				<table class="table table-hover align-middle">
-					<thead>
-						<tr>
-							<th>Job</th>
-							<th>Inicio</th>
-							<th>Fin</th>
-							<th>Estado</th>
-							<th>Duración</th>
-							<th>Transf. / Borrados</th>
-							<th>Modo</th>
-						</tr>
-					</thead>
-					<tbody id="hist-body"></tbody>
-				</table>
-			</div>
-			<p class="small text-body-secondary">Haz clic en una fila para ver el detalle y los archivos de esa ejecución.</p>
-		</section>
-
-		<!-- ---------------------------- Archivos ----------------------------- -->
-		<section id="tab-archivos" hidden>
-			<div class="row g-2 align-items-end mb-3">
-				<div class="col-auto">
-					<label class="form-label small mb-1" for="files-job">Job</label>
-					<select id="files-job" class="form-select form-select-sm"></select>
-				</div>
-			</div>
-			<nav class="breadcrumb mono" id="files-breadcrumb"></nav>
-			<div class="table-responsive">
-				<table class="table table-hover align-middle">
-					<thead>
-						<tr><th>Nombre</th><th>Tipo</th><th>Tamaño</th><th>Modificado</th></tr>
-					</thead>
-					<tbody id="files-body"></tbody>
-				</table>
-			</div>
-		</section>
-
-		<!-- -------------------------- Programación --------------------------- -->
-		<section id="tab-cron" hidden>
-			<div class="card mb-3">
-				<div class="card-body">
-					<p class="mb-1">Gestión de cron: <strong id="cron-manage">—</strong></p>
-					<p class="mb-1">Archivo: <code id="cron-path">—</code></p>
-					<p class="mb-1">¿El archivo actual coincide con el render? <strong id="cron-equal">—</strong></p>
-					<p class="mb-0 small text-body-secondary">
-						Con la gestión activada, habilitar/deshabilitar o cambiar el horario reescribe
-						<code>/etc/cron.d/backupcsr</code> (con backup). Para editar, usa el botón <em>Horario</em> en el Panel.
-					</p>
-				</div>
-			</div>
-			<h3 class="h6">Diferencias</h3>
-			<pre class="log" id="cron-diff"></pre>
-			<h3 class="h6 mt-3">Render propuesto</h3>
-			<pre class="log" id="cron-render"></pre>
-		</section>
-
+		</div>
 	</div>
+
+	<div class="toast-stack" id="toast-stack"></div>
 
 	<!-- ------------------------------- Modales ------------------------------- -->
 	<div class="modal fade" id="logModal" tabindex="-1" aria-hidden="true">
@@ -166,51 +370,6 @@
 		</div>
 	</div>
 
-	<div class="modal fade" id="jobModal" tabindex="-1" aria-hidden="true">
-		<div class="modal-dialog">
-			<div class="modal-content">
-				<div class="modal-header">
-					<h5 class="modal-title" id="jobModalLabel">Horario</h5>
-					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-				</div>
-				<div class="modal-body">
-					<input type="hidden" id="job-slug">
-					<div class="form-check form-switch mb-3">
-						<input class="form-check-input" type="checkbox" id="job-enabled">
-						<label class="form-check-label" for="job-enabled">Habilitada</label>
-					</div>
-					<div class="row g-2">
-						<div class="col-6">
-							<label class="form-label small" for="job-minute">Minuto</label>
-							<input class="form-control mono" id="job-minute" placeholder="20">
-						</div>
-						<div class="col-6">
-							<label class="form-label small" for="job-hour">Hora</label>
-							<input class="form-control mono" id="job-hour" placeholder="6-19">
-						</div>
-						<div class="col-4">
-							<label class="form-label small" for="job-dom">Día mes</label>
-							<input class="form-control mono" id="job-dom" placeholder="*">
-						</div>
-						<div class="col-4">
-							<label class="form-label small" for="job-month">Mes</label>
-							<input class="form-control mono" id="job-month" placeholder="*">
-						</div>
-						<div class="col-4">
-							<label class="form-label small" for="job-dow">Día semana</label>
-							<input class="form-control mono" id="job-dow" placeholder="*">
-						</div>
-					</div>
-					<div class="alert alert-danger mt-3 mb-0" id="job-error" hidden></div>
-				</div>
-				<div class="modal-footer">
-					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-					<button type="button" class="btn btn-primary" id="job-save">Guardar</button>
-				</div>
-			</div>
-		</div>
-	</div>
-
 	<div class="modal fade" id="runModal" tabindex="-1" aria-hidden="true">
 		<div class="modal-dialog modal-lg modal-dialog-scrollable">
 			<div class="modal-content">
@@ -219,6 +378,114 @@
 					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
 				</div>
 				<div class="modal-body" id="run-body"></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="schedule-title">Horario</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body">
+					<input type="hidden" id="schedule-slug">
+					<div class="form-check form-switch mb-3">
+						<input class="form-check-input" type="checkbox" id="schedule-enabled">
+						<label class="form-check-label" for="schedule-enabled">Habilitada</label>
+					</div>
+					<div class="mb-3">
+						<label class="form-label small">Presets</label>
+						<div class="d-flex flex-wrap gap-2" id="schedule-presets"></div>
+					</div>
+					<div class="row g-2">
+						<div class="col-6 col-md-2">
+							<label class="form-label small" for="schedule-minute">Minuto</label>
+							<input class="form-control form-control-sm mono" id="schedule-minute">
+						</div>
+						<div class="col-6 col-md-3">
+							<label class="form-label small" for="schedule-hour">Hora</label>
+							<input class="form-control form-control-sm mono" id="schedule-hour">
+						</div>
+						<div class="col-4 col-md-2">
+							<label class="form-label small" for="schedule-dom">Día mes</label>
+							<input class="form-control form-control-sm mono" id="schedule-dom">
+						</div>
+						<div class="col-4 col-md-2">
+							<label class="form-label small" for="schedule-month">Mes</label>
+							<input class="form-control form-control-sm mono" id="schedule-month">
+						</div>
+						<div class="col-4 col-md-3">
+							<label class="form-label small" for="schedule-dow">Día semana</label>
+							<input class="form-control form-control-sm mono" id="schedule-dow">
+						</div>
+					</div>
+					<div class="mt-3">
+						<label class="form-label small mb-1">Próximas ejecuciones</label>
+						<ul class="mb-0 small mono" id="schedule-preview"></ul>
+					</div>
+					<div class="alert alert-warning mt-3 mb-0 d-flex align-items-start gap-2" id="schedule-note" hidden>
+						<i class="fa-solid fa-lock mt-1"></i>
+						<div>Edición deshabilitada: activa <code>BACKUP_MANAGE_CRON=1</code> para poder guardar.</div>
+					</div>
+					<div class="alert alert-danger mt-3 mb-0" id="schedule-error" hidden></div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+						<i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
+					<button type="button" class="btn btn-outline-secondary" id="schedule-preview-btn">
+						<i class="fa-solid fa-clock"></i><span>Ver próximas</span></button>
+					<button type="button" class="btn btn-primary" id="schedule-save">
+						<i class="fa-solid fa-floppy-disk"></i><span>Guardar</span></button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="password-title">Cambiar contraseña</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body">
+					<input type="hidden" id="password-username">
+					<div class="mb-3" id="password-current-row">
+						<label class="form-label small" for="password-current">Contraseña actual</label>
+						<input type="password" class="form-control" id="password-current" autocomplete="current-password">
+					</div>
+					<div class="mb-3">
+						<label class="form-label small" for="password-new">Nueva contraseña</label>
+						<input type="password" class="form-control" id="password-new" autocomplete="new-password">
+					</div>
+					<div class="alert alert-danger mb-0" id="password-error" hidden></div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+						<i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
+					<button type="button" class="btn btn-primary" id="password-save">
+						<i class="fa-solid fa-floppy-disk"></i><span>Guardar</span></button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+		<div class="modal-dialog modal-sm modal-dialog-centered">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="confirm-title">Confirmar</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+				</div>
+				<div class="modal-body" id="confirm-text"></div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+						<i class="fa-solid fa-xmark"></i><span>Cancelar</span></button>
+					<button type="button" class="btn btn-danger" id="confirm-ok">
+						<i class="fa-solid fa-check"></i><span>Confirmar</span></button>
+				</div>
 			</div>
 		</div>
 	</div>

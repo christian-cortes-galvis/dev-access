@@ -62,6 +62,36 @@ def create_user(username: str, password: str, role: str = "admin") -> None:
     )
 
 
+def list_users() -> list[dict]:
+    return db.query(
+        "SELECT id, username, role, active, created_at FROM users ORDER BY username"
+    )
+
+
+def count_active_admins() -> int:
+    row = db.query(
+        "SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND active = 1", one=True
+    )
+    return int(row["n"]) if row else 0
+
+
+def set_role(username: str, role: str) -> None:
+    db.execute("UPDATE users SET role = %s WHERE username = %s", (role, username))
+
+
+def set_active(username: str, active: bool) -> None:
+    db.execute(
+        "UPDATE users SET active = %s WHERE username = %s", (1 if active else 0, username)
+    )
+
+
+def set_password(username: str, password: str) -> None:
+    db.execute(
+        "UPDATE users SET password_hash = %s WHERE username = %s",
+        (hash_password(password), username),
+    )
+
+
 def make_session(username: str, role: str) -> str:
     return _ser().dumps({"u": username, "r": role})
 

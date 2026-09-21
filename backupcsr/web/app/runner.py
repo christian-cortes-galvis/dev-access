@@ -25,23 +25,30 @@ def lock_path(job: dict) -> Path:
     return Path(job.get("lockfile") or f"/run/lock/backupcsr-{job['slug']}.lock")
 
 
-def _try_lock(path: Path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(path, "a+")
+def _try_lock(path: Path) -> tuple:
+    """Devuelve (handle, busy). handle None indica que no se pudo usar el lock."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle = open(path, "a+")
+    except OSError as exc:
+        log.warning("no se pudo abrir el lock %s: %s", path, exc)
+        return None, False
     try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        return handle
+        return handle, False
     except OSError:
         handle.close()
-        return None
+        return None, True
 
 
 def is_running(job: dict) -> bool:
     if job["slug"] in _locks:
         return True
-    handle = _try_lock(lock_path(job))
+    handle, busy = _try_lock(lock_path(job))
     if handle is None:
-        return True
+        # Sin acceso al lockfile no podemos afirmar que esté corriendo: no rompemos
+        # el panel por un problema de permisos.
+        return busy
     try:
         fcntl.flock(handle, fcntl.LOCK_UN)
     finally:
@@ -57,9 +64,11 @@ def start(job: dict, dry_run: bool = False) -> tuple[bool, str]:
     if not script.exists():
         return False, f"no existe el job {script}"
 
-    handle = _try_lock(lock_path(job))
+    handle, busy = _try_lock(lock_path(job))
     if handle is None:
-        return False, "el job ya está corriendo (flock ocupado)"
+        if busy:
+            return False, "el job ya está corriendo (flock ocupado)"
+        return False, "no se pudo acceder al lockfile (revisa permisos de /run/lock)"
 
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()

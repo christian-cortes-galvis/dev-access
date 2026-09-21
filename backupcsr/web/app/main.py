@@ -4,21 +4,63 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from datetime import timedelta
 
 from fastapi import FastAPI
 
-from . import api, auth, catalog, config, db, logs
+from . import api, auth, catalog, config, db, logs, sizes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("backupcsr-web")
+
+
+def _snapshot_sizes(jobs: list[dict]) -> None:
+    """Guarda el tamaño de cada job al cerrar una corrida y, si falta, a diario."""
+    if not config.SIZE_SNAPSHOT:
+        return
+    for job in jobs:
+        job_id = job.get("id")
+        if not job_id:
+            row = db.query("SELECT id FROM jobs WHERE slug = %s", (job["slug"],), one=True)
+            job_id = row["id"] if row else None
+        if not job_id:
+            continue
+        last = db.query(
+            """
+            SELECT id, finished_at FROM runs
+            WHERE job_id = %s AND finished_at IS NOT NULL
+            ORDER BY started_at DESC LIMIT 1
+            """,
+            (job_id,),
+            one=True,
+        )
+        if last and not db.query(
+            "SELECT id FROM size_snapshots WHERE run_id = %s LIMIT 1", (last["id"],), one=True
+        ):
+            size = sizes.job_size(job)
+            if size.get("bytes") is not None:
+                sizes.save_snapshot(job_id, size, run_id=last["id"], taken_at=last["finished_at"])
+        cutoff = logs.to_naive(logs.now() - timedelta(hours=24))
+        recent = db.query(
+            "SELECT id FROM size_snapshots WHERE job_id = %s AND taken_at >= %s LIMIT 1",
+            (job_id, cutoff),
+            one=True,
+        )
+        if not recent:
+            size = sizes.job_size(job)
+            if size.get("bytes") is not None:
+                sizes.save_snapshot(job_id, size)
 
 
 async def _poll() -> None:
     while True:
         try:
             if db.available():
-                for job in api.effective_jobs():
+                jobs = api.effective_jobs()
+                for job in jobs:
                     logs.store_runs(job, logs.parse_slug(job["slug"]))
+                _snapshot_sizes(jobs)
+                sizes.warm(jobs)
         except Exception:  # noqa: BLE001
             log.exception("falló el ciclo de sondeo")
         await asyncio.sleep(config.POLL_INTERVAL)
@@ -36,6 +78,7 @@ def _bootstrap() -> None:
     try:
         db.init_schema()
         catalog.sync_jobs()
+        sizes.warm(api.effective_jobs())
     except Exception:  # noqa: BLE001
         log.exception("no se pudo inicializar el esquema/catálogo")
         return
