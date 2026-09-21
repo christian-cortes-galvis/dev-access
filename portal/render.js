@@ -40,7 +40,7 @@
 
   function pill(st) {
     var el = document.createElement('span');
-    el.className = 'pill ' + pillClass(st && st.state);
+    el.className = 'badge rounded-pill pill-' + pillClass(st && st.state);
     el.textContent = pillText(st);
     if (st && st.error) el.title = st.error;
     return el;
@@ -99,23 +99,34 @@
   }
 
   function card(s) {
+    var col = document.createElement('div');
+    col.className = 'col';
+
     var link = document.createElement('a');
-    link.className = 'card';
+    link.className = 'card h-100 text-body';
     link.href = s.url;
     link.target = '_blank';
     link.rel = 'noopener';
     link.setAttribute('data-tech', (s.tech || []).join(','));
 
+    var body = document.createElement('div');
+    body.className = 'card-body';
+
     var title = document.createElement('h3');
+    title.className = 'h6 card-title';
     title.textContent = s.name;
-    link.appendChild(title);
+    body.appendChild(title);
 
     if (s.note) {
       var note = document.createElement('p');
+      note.className = 'card-text small text-body-secondary mb-0';
       note.innerHTML = s.note;
-      link.appendChild(note);
+      body.appendChild(note);
     }
-    return link;
+
+    link.appendChild(body);
+    col.appendChild(link);
+    return col;
   }
 
   function byCategory(slug) {
@@ -192,7 +203,7 @@
     if (!banner) {
       banner = document.createElement('div');
       banner.id = 'portal-banner';
-      banner.className = 'banner';
+      banner.className = 'alert alert-warning banner';
       banner.hidden = true;
       wrap.insertBefore(banner, wrap.firstChild);
     }

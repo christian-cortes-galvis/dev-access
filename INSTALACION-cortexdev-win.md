@@ -281,6 +281,8 @@ en la LAN y por Tailscale; no debe aparecer aviso de certificado.
 | Emisión falla con error de Cloudflare | Token sin `Zone:DNS:Edit` sobre `cortexdev.win`, o `CF_Account_ID` necesario en `/etc/cortexdev/acme.env`. |
 | `acme.sh --cron` no recarga nginx | `access_nginx` no está corriendo; el cert se instala igual y se recargará en el próximo arranque/deploy. |
 | Aviso de certificado en las apps | Comodín LE de `.87` no instalado o nginx sin recargar: `scripts/apps-fix-acme-reload.sh` en ubuntu-docker. |
+| `grafana.cortexdev.win` → `404` | nginx no recargó el `server` block nuevo: `docker exec access_nginx nginx -s reload` (o `scripts/deploy.sh`). |
+| Grafana no aparece en el portal (o cambió el catálogo) | `portal_api` embebe `backend/catalog.yml` en la imagen: `docker compose up -d --build portal-api`. |
 
 ### Rollback
 

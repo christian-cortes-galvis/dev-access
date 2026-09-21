@@ -23,6 +23,19 @@ port_open() { timeout 1 bash -c "</dev/tcp/127.0.0.1/$1" 2>/dev/null; }
 
 cd "$REPO_DIR"
 
+# Asegura .env (clave admin de Grafana) antes de levantar el compose.
+if [ ! -f .env ] && [ -f .env.example ]; then
+  cp .env.example .env
+  if command -v openssl >/dev/null 2>&1; then
+    pw="$(openssl rand -hex 16)"
+  else
+    pw="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  fi
+  sed -i "s|^GF_ADMIN_PASSWORD=.*|GF_ADMIN_PASSWORD=$pw|" .env
+  chmod 600 .env
+  printf 'Creado .env con GF_ADMIN_USER=%s y clave aleatoria\n' "${GF_ADMIN_USER:-admin}"
+fi
+
 if [ "${ALLOW_OTHER_HOST:-0}" != "1" ] && ! hostname -I 2>/dev/null | grep -q '192\.168\.0\.49'; then
   printf '\033[1;31mERROR\033[0m setup-services.sh debe correr en ubuntu-services (192.168.0.49); usa ALLOW_OTHER_HOST=1 para forzar\n' >&2
   exit 1
@@ -151,7 +164,7 @@ if [ -n "$PIHOLE_KIND" ] && [ -x scripts/dns-overrides.sh ]; then
   scripts/dns-overrides.sh || true
 elif [ -n "$PIHOLE_KIND" ]; then
   bad "falta scripts/dns-overrides.sh; agrega a mano en misc.dnsmasq_lines:"
-  for h in index pihole proxmox backups pbs uptime kuma netdata-services netdata-backups netdata-proxmox netdata-docker; do
+  for h in index pihole proxmox backups pbs uptime kuma grafana netdata-services netdata-backups netdata-proxmox netdata-docker; do
     printf '         address=/%s.cortexdev.win/192.168.0.49\n' "$h"
   done
   printf '       Conserva el wildcard: address=/cortexdev.win/192.168.0.87\n'
