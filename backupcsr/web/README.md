@@ -130,7 +130,25 @@ cd /opt/backupcsr/web && venv/bin/python -m app.cli create-admin --username admi
   atómica, validación de sintaxis y `systemctl reload cron`). Reiniciar:
   `systemctl restart backupcsr-web`.
 
-`tools/validar-copias.sh` no se modifica y sigue leyendo el cron generado.
+`tools/validar-copias.sh` sigue leyendo el cron generado y ahora además avisa si dos jobs
+comparten minuto (señal de que el cron se reescribió con una BD desviada).
+
+### Horario: el cron instalado manda
+
+El **cron instalado** (`/etc/cron.d/backupcsr`) es la fuente de verdad del **estado** y de la
+**próxima ejecución**: es lo que realmente dispara. La tabla `jobs` de la BD es el horario
+**editable** del portal y puede quedar desviada (p. ej. tras copiar el cron del repo con
+`install.sh`, porque `sync-jobs` no pisa los horarios de filas existentes).
+
+- Con desvío, la vista *Programación* marca **desvío** (badge + `BD: …`); con
+  `BACKUP_MANAGE_CRON=1` la campana añade una alerta agregada `kind: schedule`. Guardar en el
+  editor adopta el horario efectivo y limpia el desvío.
+- `adopt-cron` alinea la BD con el cron instalado **sin** tocar `enabled` ni reescribir el
+  archivo; `install.sh` lo ejecuta tras instalar el cron:
+  ```bash
+  cd /opt/backupcsr/web && venv/bin/python -m app.cli adopt-cron --dry-run   # ver cambios
+  cd /opt/backupcsr/web && venv/bin/python -m app.cli adopt-cron             # aplicar
+  ```
 
 ## API
 

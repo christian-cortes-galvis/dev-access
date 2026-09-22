@@ -190,6 +190,7 @@ const NOTIF_META = {
   job: { icon: 'server', title: 'Tarea' },
   db: { icon: 'database', title: 'Base de datos' },
   clock: { icon: 'clock', title: 'Reloj del portal' },
+  schedule: { icon: 'clock', title: 'Horario' },
 };
 
 function notifRow(alert) {

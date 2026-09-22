@@ -271,6 +271,37 @@ parse_cron() {
 	done <"$CRON_FILE"
 }
 
+# El portal puede reescribir el cron desde su BD (BACKUP_MANAGE_CRON=1) y, si la BD quedó
+# desviada (p. ej. todos los jobs a :20), varios arrancan a la vez: compiten por la cola
+# global y `flock -n` descarta corridas en silencio. Avisa si dos jobs habilitados comparten
+# minuto con horas solapadas.
+check_cron_spread() {
+	local -a jobs=("${CRON_JOBS[@]}")
+	local n=${#jobs[@]}
+	[ "$n" -gt 0 ] || return 0
+	local i j a b h collisions=0
+	for ((i = 0; i < n; i++)); do
+		for ((j = i + 1; j < n; j++)); do
+			a="${jobs[$i]}"
+			b="${jobs[$j]}"
+			[ "${CRON_MIN[$a]}" = "${CRON_MIN[$b]}" ] || continue
+			local -a ha=() hb=()
+			expand_field "${CRON_HOUR[$a]}" 0 23
+			ha=("${FIELD_OUT[@]}")
+			expand_field "${CRON_HOUR[$b]}" 0 23
+			hb=("${FIELD_OUT[@]}")
+			for h in "${ha[@]}"; do
+				if [[ " ${hb[*]} " == *" $h "* ]]; then
+					warn "job $a y $b arrancan al minuto ${CRON_MIN[$a]} con horas solapadas (flock -n puede descartar corridas)"
+					collisions=$((collisions + 1))
+					break
+				fi
+			done
+		done
+	done
+	[ "$collisions" = "0" ] && ok "sin colisiones de minuto entre los $n jobs del cron"
+}
+
 # expand_field "6-19" 0 23 -> FIELD_OUT=(6 ... 19)
 FIELD_OUT=()
 expand_field() {
@@ -501,6 +532,7 @@ else
 	if [ "${#CRON_JOBS[@]}" -eq 0 ]; then
 		err "no hay jobs habilitados en $CRON_FILE"
 	fi
+	check_cron_spread
 	check_credentials
 	check_keys
 	check_nas

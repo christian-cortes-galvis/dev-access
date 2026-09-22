@@ -113,6 +113,23 @@ def _schedule(job: dict) -> dict:
     }
 
 
+def _same_schedule(a: dict, b: dict) -> bool:
+    return all(
+        str(a.get(field, "")) == str(b.get(field, ""))
+        for field in ("minute", "hour", "dom", "month", "dow")
+    )
+
+
+def _effective_schedule(job: dict) -> dict:
+    """Horario que realmente dispara: el del cron instalado; si no, el de la BD.
+
+    El cron es la fuente de verdad para el estado y la próxima ejecución: es lo
+    que cron ejecuta. La BD es el horario editable del portal y puede estar
+    desviada (ver `schedule_drift`).
+    """
+    return job.get("installed_cron") or _schedule(job)
+
+
 def _cron_valid_field(value: str) -> bool:
     return bool(CRON_FIELD_RE.match(value.strip()))
 
@@ -144,6 +161,17 @@ def effective_jobs() -> list[dict]:
             job["cron_dom"] = cron["dom"]
             job["cron_month"] = cron["month"]
             job["cron_dow"] = cron["dow"]
+        # Horario realmente instalado en /etc/cron.d/backupcsr (fuente de verdad
+        # del disparo); puede no coincidir con el de la BD.
+        installed = cron_map.get(slug)
+        if installed:
+            job["installed_cron"] = {
+                "minute": installed["minute"],
+                "hour": installed["hour"],
+                "dom": installed["dom"],
+                "month": installed["month"],
+                "dow": installed["dow"],
+            }
         merged.append(job)
     merged.sort(key=lambda item: item.get("sort", 100))
     return merged
@@ -163,7 +191,10 @@ def collect_jobs() -> list[dict]:
         runs = logs.parse_slug(job["slug"])
         latest = runs[-1] if runs else None
         running = runner.is_running(job)
-        status, detail = logs.evaluate(latest, _schedule(job), reference, running)
+        # El estado se evalúa con el cron instalado (lo que dispara de verdad); la
+        # BD solo aporta el horario editable y se compara para avisar del desvío.
+        sched = _effective_schedule(job)
+        status, detail = logs.evaluate(latest, sched, reference, running)
         if not job.get("enabled"):
             # Una tarea deshabilitada no "debe" correr: ni tarda ni falta, y así no
             # entra en los KPIs de fallos/sin datos ni en el banner de alertas.
@@ -177,9 +208,14 @@ def collect_jobs() -> list[dict]:
                 "running": running,
                 "last_run": logs.run_to_dict(latest) if latest else None,
                 "next_run": (
-                    _iso(logs.next_run(_schedule(job), reference))
+                    _iso(logs.next_run(sched, reference))
                     if job.get("enabled")
                     else None
+                ),
+                "cron_effective": sched,
+                "schedule_drift": bool(
+                    job.get("installed_cron")
+                    and not _same_schedule(job["installed_cron"], _schedule(job))
                 ),
                 "runs_total": len(runs),
                 "size": size,
@@ -234,6 +270,18 @@ def build_alerts(jobs: list[dict]) -> list[dict]:
             "level": "warning", "kind": "clock",
             "text": f"Los logs van {skew} h por delante del reloj del portal: "
                     "revisa BACKUP_TZ (¿UTC?) o la zona del host",
+        })
+    # Una sola alerta agregada: el estado ya se evalúa con el cron instalado, así
+    # que el desvío de la BD no es operativo, pero conviene saber que el portal y
+    # el cron no dicen lo mismo (p. ej. tras un install.sh).
+    drifted = [job for job in jobs if job.get("enabled") and job.get("schedule_drift")]
+    if drifted and config.MANAGE_CRON:
+        names = ", ".join(str(job.get("name") or job["slug"]) for job in drifted)
+        alerts.append({
+            "level": "warning", "kind": "schedule",
+            "slugs": [job["slug"] for job in drifted],
+            "text": f"{len(drifted)} tarea(s) difieren del cron instalado ({names}); "
+                    "el estado se evalúa con el cron",
         })
     return alerts
 

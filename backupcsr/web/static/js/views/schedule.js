@@ -37,6 +37,20 @@ async function loadCron() {
   }
 }
 
+/* Horario que realmente dispara: el del cron instalado. La BD es el horario
+   editable y puede estar desviada (se muestra como "BD:" cuando difiere). */
+function effectiveSchedule(job) {
+  const cron = job.cron_effective;
+  if (!cron) return job;
+  return {
+    cron_minute: cron.minute,
+    cron_hour: cron.hour,
+    cron_dom: cron.dom,
+    cron_month: cron.month,
+    cron_dow: cron.dow,
+  };
+}
+
 function renderTable(state) {
   const body = $('cron-body');
   const canManage = state.manageCron && state.user && state.user.role === 'admin';
@@ -52,12 +66,21 @@ function renderTable(state) {
     button.innerHTML = '<i class="fa-solid fa-pen-to-square"></i><span>' +
       (canManage ? 'Editar' : 'Ver') + '</span>';
     actions.appendChild(button);
+    const scheduleCell = el('td', {}, [
+      el('code', { text: scheduleText(effectiveSchedule(job)) }),
+    ]);
+    if (job.schedule_drift) {
+      scheduleCell.appendChild(el('div', { class: 'd-flex align-items-center gap-1 mt-1' }, [
+        el('span', { class: 'badge rounded-pill pill-warn', text: 'desvío' }),
+        el('span', { class: 'small muted', text: 'BD: ' + scheduleText(job) }),
+      ]));
+    }
     body.appendChild(el('tr', {}, [
       el('td', {}, [
         el('div', { class: 'fw-semibold', text: job.name }),
         el('div', { class: 'muted mono', text: job.slug }),
       ]),
-      el('td', {}, [el('code', { text: scheduleText(job) })]),
+      scheduleCell,
       el('td', {}, [el('span', {
         class: 'badge rounded-pill ' + (job.enabled ? 'pill-ok' : 'pill-unknown'),
         text: job.enabled ? 'habilitada' : 'deshabilitada',
@@ -126,11 +149,14 @@ export function openEditor(job, canManage) {
   $('schedule-enabled').disabled = !canManage;
   ['schedule-minute', 'schedule-hour', 'schedule-dom', 'schedule-month', 'schedule-dow']
     .forEach((id) => { $(id).readOnly = !canManage; });
-  $('schedule-minute').value = job.cron_minute;
-  $('schedule-hour').value = job.cron_hour;
-  $('schedule-dom').value = job.cron_dom;
-  $('schedule-month').value = job.cron_month;
-  $('schedule-dow').value = job.cron_dow;
+  // Si el cron instalado difiere de la BD, el editor arranca con el horario efectivo
+  // para que Guardar (MANAGE_CRON=1) adopte el real y limpie el desvío.
+  const source = job.schedule_drift ? effectiveSchedule(job) : job;
+  $('schedule-minute').value = source.cron_minute;
+  $('schedule-hour').value = source.cron_hour;
+  $('schedule-dom').value = source.cron_dom;
+  $('schedule-month').value = source.cron_month;
+  $('schedule-dow').value = source.cron_dow;
   $('schedule-error').hidden = true;
   $('schedule-note').hidden = !!canManage;
   $('schedule-preview').innerHTML = '';

@@ -5,6 +5,7 @@ Uso (dentro del venv, en /opt/backupcsr/web):
   venv/bin/python -m app.cli apply-schema
   venv/bin/python -m app.cli sync-jobs
   venv/bin/python -m app.cli render-cron [--apply]
+  venv/bin/python -m app.cli adopt-cron [--dry-run]
   venv/bin/python -m app.cli snapshot-sizes
   venv/bin/python -m app.cli resync-runs [--dry-run]
   venv/bin/python -m app.cli status
@@ -72,6 +73,76 @@ def cmd_render_cron(args: argparse.Namespace) -> int:
     for item in diff["diferencias"]:
         print(f"  {item['slug']}: actual={item['actual']} deseado={item['deseado']}")
     return 1
+
+
+def cmd_adopt_cron(args: argparse.Namespace) -> int:
+    """Adopta el cron instalado como horario en la BD (no reescribe el archivo).
+
+    El cron instalado es la fuente de verdad del disparo; la BD es el horario
+    editable del portal. Si se desvían (p. ej. tras copiar un cron nuevo con
+    install.sh), el panel evalúa con el cron y avisa del desvío: este comando
+    alinea la BD sin tocar `enabled` ni reescribir /etc/cron.d/backupcsr.
+    """
+    if not db.available():
+        print(f"ERROR: MySQL no disponible ({db.last_error()})", file=sys.stderr)
+        return 2
+    installed = cronfile.parse()
+    rows = {row["slug"]: row for row in db.query("SELECT * FROM jobs")}
+    cron_only = sorted(set(installed) - set(rows))
+    db_only = sorted(slug for slug in rows if slug not in installed)
+    changed = 0
+    same = 0
+    for slug, cron in sorted(installed.items()):
+        row = rows.get(slug)
+        if not row:
+            continue
+        current = {
+            "minute": row.get("cron_minute"),
+            "hour": row.get("cron_hour"),
+            "dom": row.get("cron_dom"),
+            "month": row.get("cron_month"),
+            "dow": row.get("cron_dow"),
+        }
+        target = {
+            "minute": cron["minute"],
+            "hour": cron["hour"],
+            "dom": cron["dom"],
+            "month": cron["month"],
+            "dow": cron["dow"],
+        }
+        if all(str(current[key]) == str(value) for key, value in target.items()):
+            same += 1
+            continue
+        print(
+            f"  {slug}: {current['minute']} {current['hour']} -> "
+            f"{target['minute']} {target['hour']}"
+        )
+        if not args.dry_run:
+            db.execute(
+                """
+                UPDATE jobs SET cron_minute=%s, cron_hour=%s, cron_dom=%s,
+                    cron_month=%s, cron_dow=%s
+                WHERE slug=%s
+                """,
+                (
+                    target["minute"],
+                    target["hour"],
+                    target["dom"],
+                    target["month"],
+                    target["dow"],
+                    slug,
+                ),
+            )
+        changed += 1
+    if args.dry_run:
+        print(f"DRY-RUN: se actualizarían {changed} horario(s); {same} ya coinciden")
+    else:
+        print(f"horarios adoptados del cron instalado: {changed}; ya coincidían: {same}")
+    if cron_only:
+        print(f"AVISO: en el cron sin fila en la BD (revisar sync-jobs): {', '.join(cron_only)}")
+    if db_only:
+        print(f"AVISO: en la BD sin línea en el cron (deshabilitadas o sin script): {', '.join(db_only)}")
+    return 0
 
 
 def cmd_status(_args: argparse.Namespace) -> int:
@@ -159,6 +230,10 @@ def build_parser() -> argparse.ArgumentParser:
     render = sub.add_parser("render-cron", help="compara/reescribe /etc/cron.d/backupcsr")
     render.add_argument("--apply", action="store_true", help="escribe el cron (si MANAGE_CRON=1)")
     render.set_defaults(func=cmd_render_cron)
+
+    adopt = sub.add_parser("adopt-cron", help="adopta el cron instalado como horario en la BD")
+    adopt.add_argument("--dry-run", action="store_true", help="solo muestra los cambios")
+    adopt.set_defaults(func=cmd_adopt_cron)
 
     sub.add_parser("status", help="estado de conexión/rutas").set_defaults(func=cmd_status)
     sub.add_parser("snapshot-sizes", help="mide y guarda el tamaño de cada job").set_defaults(

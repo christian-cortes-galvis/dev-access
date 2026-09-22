@@ -176,6 +176,19 @@ sed -i 's/\r$//' /etc/cron.d/backupcsr /etc/logrotate.d/backupcsr "$ETC_DIR/cred
 chmod 0644 /etc/cron.d/backupcsr /etc/logrotate.d/backupcsr
 chmod 600 "$ETC_DIR/credentials.env" "$ETC_DIR/nas.creds"
 
+# El cron instalado es la verdad para el estado; la BD del portal es el horario editable.
+# Al copiar este cron la BD puede quedar desviada (p. ej. el `:20` viejo) y el panel marcaría
+# TARDE a jobs que sí corren: se adopta el cron en la BD. Best-effort: si el portal todavía no
+# está desplegado (no existe el venv), solo se avisa.
+if [ -x "$OPT_DIR/web/venv/bin/python" ] && [ -f "$ETC_DIR/web.env" ]; then
+	if ( cd "$OPT_DIR/web" && set -a && . "$ETC_DIR/web.env" && set +a \
+		&& venv/bin/python -m app.cli adopt-cron ); then
+		:
+	else
+		echo "ADVERTENCIA: no se pudo reconciliar la BD con el cron instalado" >&2
+	fi
+fi
+
 echo "== 7/7 NAS =="
 if [ "$DO_NAS" = "1" ]; then
 	FSTAB_LINE="//$NAS_SERVER/$NAS_SHARE  $NAS_MOUNT  cifs  credentials=$ETC_DIR/nas.creds,vers=3.0,uid=$RUN_USER,gid=$RUN_USER,file_mode=0660,dir_mode=0770,iocharset=utf8,_netdev,nofail,x-systemd.automount  0  0"
