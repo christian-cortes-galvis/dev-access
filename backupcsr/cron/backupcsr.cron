@@ -8,7 +8,7 @@
 # America/Bogota (timedatectl set-timezone America/Bogota) o los horarios se evalúan en la
 # zona del host y los jobs correrán a otra hora (con UTC, 01:00-14:00 Colombia).
 #
-# Los minutos van ESCALONADOS (02, 14, 20, 26, 38, 50) para no lanzar los 6 jobs a
+# Los minutos van ESCALONADOS (02, 08, 14, 20, 26, 38, 50) para no lanzar los jobs a
 # la vez: este anfitrión tiene 4 vCPU y poca RAM, y seis mirrors simultáneos contra
 # el NAS lo dejaban sin memoria y con el swap lleno. Además cada job toma turno en
 # una cola global (MIRROR_GATE, ver lib/common.sh) y corre con nice/ionice bajos.
@@ -21,9 +21,10 @@ MAILTO=""
 # --- Google y Latino: SFTP con llave -> NAS ---
 2 6-19 * * *        root  flock -n /run/lock/backupcsr-google-bd.lock   /opt/backupcsr/jobs/google-bd.sh
 14 6-19 * * *       root  flock -n /run/lock/backupcsr-latino-bd.lock   /opt/backupcsr/jobs/latino-bd.sh
+8 6,13,19 * * *     root  flock -n /run/lock/backupcsr-latino-web.lock  /opt/backupcsr/jobs/latino-web.sh
 
 # --- NAS local (Ruta56, Gastro, Enter): FTP -> NAS ---
-26 6-19 * * *       root  flock -n /run/lock/backupcsr-ruta56-bd.lock   /opt/backupcsr/jobs/ruta56-bd.sh
-20 6,13,19 * * *    root  flock -n /run/lock/backupcsr-ruta56-web.lock  /opt/backupcsr/jobs/ruta56-web.sh
+26 6-19 * * *        root  flock -n /run/lock/backupcsr-ruta56-bd.lock   /opt/backupcsr/jobs/ruta56-bd.sh
+20 6,13,19 * * *     root  flock -n /run/lock/backupcsr-ruta56-web.lock  /opt/backupcsr/jobs/ruta56-web.sh
 38 6-19 * * *       root  flock -n /run/lock/backupcsr-gastro-bd.lock   /opt/backupcsr/jobs/gastro-bd.sh
 50 6-19 * * *       root  flock -n /run/lock/backupcsr-enter-bd.lock    /opt/backupcsr/jobs/enter-bd.sh

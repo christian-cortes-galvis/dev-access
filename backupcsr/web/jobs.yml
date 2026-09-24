@@ -1,9 +1,12 @@
 # Catálogo de jobs del portal de copias (fuente de verdad de la metadata).
 #
-# El horario de aquí es el valor POR DEFECTO: al insertar un job nuevo en la tabla
-# `jobs` se copia; las ediciones posteriores del horario/enabled se conservan en la
-# BD (catalog.py nunca las pisa). Quitar un job de este archivo lo desactiva
-# (`enabled=0`) pero no borra su histórico.
+# La ficha y el horario de aquí son el valor POR DEFECTO: al insertar un job nuevo en
+# la tabla `jobs` se copian; las ediciones posteriores (horario, enabled y los campos
+# de la ficha: nombre, descripción, origen, destino, lockfile, orden, criticidad,
+# responsable, retención, etiquetas, exclusiones y notas) se conservan en la BD, que
+# manda tras el alta (catalog.py no las pisa). Los campos nuevos de la ficha se siembran
+# del YAML solo si están vacíos, para instalaciones que vienen de un esquema anterior.
+# Quitar un job de este archivo lo desactiva (`enabled=0`) pero no borra su histórico.
 #
 # Este archivo NO ejecuta nada: los jobs reales viven en /opt/backupcsr/jobs/*.sh y
 # el horario efectivo está en /etc/cron.d/backupcsr (generado desde la BD cuando
@@ -72,6 +75,18 @@ jobs:
       hour: "6,13,19"
     sort: 40
 
+  - slug: latino-web
+    name: Latino Web
+    description: "Archivos web de Chequeos/Latino (SFTP con la llave latino): EDUCACION y DARUMA (daruma302.socimedicostools.info) -> NAS."
+    origin_type: sftp
+    source: /home/chequeos/EDUCACION + /home/chequeos/DARUMA
+    dest_rel: latino-web
+    lockfile: /run/lock/backupcsr-latino-web.lock
+    cron:
+      minute: "8"
+      hour: "6,13,19"
+    sort: 45
+
   - slug: gastro-bd
     name: Gastro BD
     description: Base de datos de Gastro (FTP).
@@ -99,27 +114,20 @@ jobs:
   # --- Tareas deshabilitadas --------------------------------------------------
   # Quedaron fuera de la migración (OneDrive vetado / Ticware no debe llenar el
   # NAS) y se registran aquí, deshabilitadas, para no perderlas de vista. No
-  # tienen script en /opt/backupcsr/jobs: no entran al cron, ni al validador, ni
-  # se miden en el panel. Para habilitarlas hay que escribir el script, ajustar
-  # origen/destino y revisar el horario (ver README, "Tareas deshabilitadas").
+  # entran al cron, ni al validador, ni se miden en el panel. google-web ya tiene
+  # script corregido en /opt/backupcsr/jobs, pero sigue deshabilitado; ticware-*
+  # todavía no tienen script. Para habilitarlas hay que ajustar origen/destino y
+  # revisar el horario (ver README, "Tareas deshabilitadas").
 
   - slug: google-web
     name: Google Web (historias clínicas)
-    description: Copia del sitio de historias clínicas del VPS Google (SFTP con la llave google). Se dejó fuera por publicar a OneDrive; falta el script y confirmar origen y destino.
+    description: Copia del sitio de historias clínicas del VPS Google (SFTP con la llave google). Se dejó fuera por publicar a OneDrive; el script ya espeja a /mnt/nas/google-web y sigue deshabilitado.
     origin_type: sftp
-    source: /var/www/html/historiasclinicas/files
-    dest_rel: files
+    source: /var/www/html/centro-apoyo/assets + /var/www/html/sapg/assets + /var/www/html/historiasclinicas/files
+    dest_rel: google-web
     lockfile: /run/lock/backupcsr-google-web.lock
     enabled: false
     sort: 90
-
-  - slug: latino-web
-    name: Latino Web
-    description: Archivos web de Chequeos/Latino (SFTP con la llave latino). Se dejó fuera por publicar a OneDrive; falta el script y confirmar origen y destino.
-    origin_type: sftp
-    lockfile: /run/lock/backupcsr-latino-web.lock
-    enabled: false
-    sort: 91
 
   - slug: ticware-bd
     name: Ticware BD

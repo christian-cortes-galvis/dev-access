@@ -90,6 +90,12 @@ def cmd_adopt_cron(args: argparse.Namespace) -> int:
     rows = {row["slug"]: row for row in db.query("SELECT * FROM jobs")}
     cron_only = sorted(set(installed) - set(rows))
     db_only = sorted(slug for slug in rows if slug not in installed)
+    # El cron dispara el slug aunque la BD lo tenga enabled=0: el panel lo mostrará
+    # DESHABILITADA (sin próxima corrida ni alertas) y, con MANAGE_CRON, la próxima
+    # reescritura del cron borraría su línea. Se avisa sin tocar `enabled`.
+    disabled_in_cron = sorted(
+        slug for slug, row in rows.items() if slug in installed and not row.get("enabled")
+    )
     changed = 0
     same = 0
     for slug, cron in sorted(installed.items()):
@@ -142,6 +148,15 @@ def cmd_adopt_cron(args: argparse.Namespace) -> int:
         print(f"AVISO: en el cron sin fila en la BD (revisar sync-jobs): {', '.join(cron_only)}")
     if db_only:
         print(f"AVISO: en la BD sin línea en el cron (deshabilitadas o sin script): {', '.join(db_only)}")
+    if disabled_in_cron:
+        print(
+            "AVISO: el cron instalado disparará "
+            f"{', '.join(disabled_in_cron)}, pero la BD lo(s) tiene enabled=0: el panel lo(s) "
+            "mostrará DESHABILITADA y podría borrar su línea al reescribir el cron. "
+            "Habilítalo(s) en el panel o con "
+            "UPDATE jobs SET enabled=1 WHERE slug IN (...);",
+            file=sys.stderr,
+        )
     return 0
 
 

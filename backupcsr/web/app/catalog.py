@@ -1,9 +1,11 @@
 """Catálogo de jobs: lee jobs.yml y lo sincroniza con la tabla `jobs`.
 
 Regla de sincronización (igual que backend/catalog.yml del portal):
-- Los jobs nuevos se insertan con el horario por defecto del YAML.
-- Los existentes actualizan solo la metadata (nombre, descripción, origen, destino,
-  lockfile, orden); NUNCA se pisan `enabled` ni los campos de cron que el usuario editó.
+- Los jobs nuevos se insertan con el horario y la ficha por defecto del YAML.
+- Los existentes NO se pisan: la BD manda tras el alta (ni `enabled`/cron, ni la ficha).
+  Los campos nuevos de la ficha (criticality, owner, retention_days, tags,
+  size_exclude, notes) se siembran del YAML solo si están vacíos, para rellenar
+  instalaciones que vienen de un esquema anterior sin pisar ediciones.
 - Los jobs que ya no están en el YAML se desactivan (enabled=0), sin borrar histórico.
 """
 from __future__ import annotations
@@ -18,6 +20,24 @@ log = logging.getLogger("backupcsr-web")
 
 DEFAULT_CRON = {"minute": "20", "hour": "6-19", "dom": "*", "month": "*", "dow": "*"}
 
+CRITICALITIES = ("alta", "media", "baja")
+ORIGIN_TYPES = ("ftp", "sftp", "sftp_pass")
+
+
+def split_list(value) -> list[str]:
+    """Normaliza lista de YAML/BD (lista, o texto separado por comas) a lista limpia."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw = value.replace(",", " ").split()
+    else:
+        raw = list(value)
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def join_list(value, limit: int = 512) -> str:
+    return ",".join(split_list(value))[:limit]
+
 
 def load_catalog() -> dict:
     if not config.CATALOG_PATH.exists():
@@ -29,10 +49,7 @@ def load_catalog() -> dict:
 
 def _size_exclude(item: dict) -> list[str]:
     """Patrones (nombres de hijo directo del destino) a excluir del cálculo de tamaño."""
-    raw = item.get("size_exclude") or []
-    if isinstance(raw, str):
-        raw = raw.replace(",", " ").split()
-    return [str(value).strip().strip("/") for value in raw if str(value).strip()]
+    return [value.strip("/") for value in split_list(item.get("size_exclude"))]
 
 
 def catalog_jobs() -> list[dict]:
@@ -59,6 +76,11 @@ def catalog_jobs() -> list[dict]:
                 "cron_dow": str(cron.get("dow", "*")),
                 "sort": int(item.get("sort", 100)),
                 "size_exclude": _size_exclude(item),
+                "criticality": str(item.get("criticality", "media") or "media"),
+                "owner": item.get("owner", "") or "",
+                "retention_days": item.get("retention_days"),
+                "tags": join_list(item.get("tags"), 255),
+                "notes": item.get("notes", "") or "",
             }
         )
     return out
@@ -70,26 +92,29 @@ def sync_jobs() -> int:
         return 0
     slugs = [job["slug"] for job in jobs]
     for job in jobs:
+        params = {**job, "size_exclude": join_list(job.get("size_exclude"))}
         db.execute(
             """
             INSERT INTO jobs (
                 slug, name, description, origin_type, source, dest_rel, lockfile,
-                enabled, cron_minute, cron_hour, cron_dom, cron_month, cron_dow, sort
+                enabled, cron_minute, cron_hour, cron_dom, cron_month, cron_dow, sort,
+                criticality, owner, retention_days, tags, size_exclude, notes
             ) VALUES (
                 %(slug)s, %(name)s, %(description)s, %(origin_type)s, %(source)s,
                 %(dest_rel)s, %(lockfile)s, %(enabled)s, %(cron_minute)s, %(cron_hour)s,
-                %(cron_dom)s, %(cron_month)s, %(cron_dow)s, %(sort)s
+                %(cron_dom)s, %(cron_month)s, %(cron_dow)s, %(sort)s,
+                %(criticality)s, %(owner)s, %(retention_days)s, %(tags)s,
+                %(size_exclude)s, %(notes)s
             )
             ON DUPLICATE KEY UPDATE
-                name = VALUES(name),
-                description = VALUES(description),
-                origin_type = VALUES(origin_type),
-                source = VALUES(source),
-                dest_rel = VALUES(dest_rel),
-                lockfile = VALUES(lockfile),
-                sort = VALUES(sort)
+                criticality = COALESCE(NULLIF(criticality, ''), VALUES(criticality)),
+                owner = COALESCE(NULLIF(owner, ''), VALUES(owner)),
+                retention_days = COALESCE(retention_days, VALUES(retention_days)),
+                tags = COALESCE(NULLIF(tags, ''), VALUES(tags)),
+                size_exclude = COALESCE(NULLIF(size_exclude, ''), VALUES(size_exclude)),
+                notes = COALESCE(NULLIF(notes, ''), VALUES(notes))
             """,
-            job,
+            params,
         )
     placeholders = ",".join(["%s"] * len(slugs))
     db.execute(f"UPDATE jobs SET enabled = 0 WHERE slug NOT IN ({placeholders})", slugs)

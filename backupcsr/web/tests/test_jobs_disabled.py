@@ -47,8 +47,8 @@ config.ETC_DIR.mkdir(parents=True, exist_ok=True)
 cronfile.reload_cron = lambda: True
 USER = {"username": "tester", "role": "admin"}
 
-DISABLED = ["google-web", "latino-web", "ticware-bd", "ticware-web"]
-ENABLED = ["google-bd", "latino-bd", "ruta56-bd", "ruta56-web", "gastro-bd", "enter-bd"]
+DISABLED = ["google-web", "ticware-bd", "ticware-web"]
+ENABLED = ["google-bd", "latino-bd", "latino-web", "ruta56-bd", "ruta56-web", "gastro-bd", "enter-bd"]
 
 checks = 0
 failures = 0
@@ -77,9 +77,9 @@ def run(coro):
 # ------------------------------------------------------------- catálogo real
 raw = yaml.safe_load((WEB_DIR / "jobs.yml").read_text(encoding="utf-8"))["jobs"]
 raw_disabled = {item["slug"]: item for item in raw if item.get("enabled") is False}
-check("jobs.yml: las 4 deshabilitadas están registradas", sorted(raw_disabled) == DISABLED,
+check("jobs.yml: las 3 deshabilitadas están registradas", sorted(raw_disabled) == DISABLED,
       sorted(raw_disabled))
-check("jobs.yml: las 6 habilitadas no llevan enabled: false",
+check("jobs.yml: las 7 habilitadas no llevan enabled: false",
       [item["slug"] for item in raw if item.get("enabled") is False] == DISABLED)
 
 jobs = {job["slug"]: job for job in catalog.catalog_jobs()}
@@ -94,11 +94,16 @@ check("deshabilitada: lockfile propio",
       jobs["ticware-bd"]["lockfile"].endswith("backupcsr-ticware-bd.lock"))
 check("deshabilitada: describe por qué quedó fuera",
       "NAS" in jobs["ticware-bd"]["description"] and "OneDrive" in jobs["google-web"]["description"])
+check("ficha: campos nuevos con defaults",
+      jobs["ruta56-bd"]["criticality"] == "media" and jobs["ruta56-bd"]["owner"] == ""
+      and jobs["ruta56-bd"]["tags"] == "" and jobs["ruta56-bd"]["notes"] == ""
+      and jobs["ruta56-bd"]["retention_days"] is None)
+check("ficha: size_exclude de ruta56-bd", jobs["ruta56-bd"]["size_exclude"] == ["storage"])
 
 # ------------------------------------------------------------------- cron
 rendered = cronfile.render(catalog.catalog_jobs())
 check("cron: ninguna línea de las deshabilitadas", not any(slug in rendered for slug in DISABLED))
-check("cron: las 6 habilitadas siguen", all(slug in rendered for slug in ENABLED))
+check("cron: las 7 habilitadas siguen", all(slug in rendered for slug in ENABLED))
 config.CRON_FILE.parent.mkdir(parents=True, exist_ok=True)
 cronfile.write(catalog.catalog_jobs())
 written = config.CRON_FILE.read_text(encoding="utf-8")
@@ -119,9 +124,9 @@ check("panel: las habilitadas sí calculan próxima ejecución",
 # KPIs del panel: las deshabilitadas no cuentan como "fallos / sin datos".
 sizes.warm = lambda *args, **kwargs: False
 counts = run(api.summary(USER))["counts"]
-check("resumen: 4 deshabilitadas de 10", counts.get("DESHABILITADA") == 4 and counts.get("total") == 10,
+check("resumen: 3 deshabilitadas de 10", counts.get("DESHABILITADA") == 3 and counts.get("total") == 10,
       counts)
-check("resumen: NUNCA solo las 6 habilitadas", counts.get("NUNCA") == 6 and counts.get("habilitados") == 6,
+check("resumen: NUNCA solo las 7 habilitadas", counts.get("NUNCA") == 7 and counts.get("habilitados") == 7,
       counts)
 
 # --------------------------------------------------------------- alertas

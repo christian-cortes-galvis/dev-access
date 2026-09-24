@@ -20,6 +20,8 @@ log = logging.getLogger("backupcsr-web")
 router = APIRouter(prefix="/api")
 
 CRON_FIELD_RE = re.compile(r"^[0-9*/,\-]+$")
+DEST_REL_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+LOCKFILE_RE = re.compile(r"^/run/lock/[A-Za-z0-9._/-]+$")
 JOB_FIELDS = (
     "slug",
     "name",
@@ -27,6 +29,7 @@ JOB_FIELDS = (
     "origin_type",
     "source",
     "dest_rel",
+    "lockfile",
     "enabled",
     "cron_minute",
     "cron_hour",
@@ -34,6 +37,22 @@ JOB_FIELDS = (
     "cron_month",
     "cron_dow",
     "sort",
+    "criticality",
+    "owner",
+    "retention_days",
+    "tags",
+    "size_exclude",
+    "notes",
+)
+# Campos que cambian el disparo real: exigen BACKUP_MANAGE_CRON y reescriben el cron.
+CRON_FIELDS = (
+    "enabled",
+    "lockfile",
+    "cron_minute",
+    "cron_hour",
+    "cron_dom",
+    "cron_month",
+    "cron_dow",
 )
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.@-]{3,64}$")
 ROLES = ("admin", "viewer")
@@ -51,12 +70,27 @@ class RunIn(BaseModel):
 
 
 class JobPatch(BaseModel):
+    # Programación: exige BACKUP_MANAGE_CRON (reescribe /etc/cron.d/backupcsr).
     enabled: bool | None = None
+    lockfile: str | None = None
     cron_minute: str | None = None
     cron_hour: str | None = None
     cron_dom: str | None = None
     cron_month: str | None = None
     cron_dow: str | None = None
+    # Ficha: solo exige rol admin.
+    name: str | None = None
+    description: str | None = None
+    origin_type: str | None = None
+    source: str | None = None
+    dest_rel: str | None = None
+    sort: int | None = None
+    criticality: str | None = None
+    owner: str | None = None
+    retention_days: int | None = None
+    tags: str | None = None
+    size_exclude: str | None = None
+    notes: str | None = None
 
 
 class UserIn(BaseModel):
@@ -134,6 +168,55 @@ def _cron_valid_field(value: str) -> bool:
     return bool(CRON_FIELD_RE.match(value.strip()))
 
 
+def _valid_dest_rel(value: str) -> bool:
+    value = value.strip()
+    if not value or len(value) > 255 or value.startswith("/"):
+        return False
+    if ".." in value.split("/"):
+        return False
+    return bool(DEST_REL_RE.match(value))
+
+
+def _valid_lockfile(value: str) -> bool:
+    if not value or len(value) > 255 or not value.startswith("/run/lock/"):
+        return False
+    # Sin '..' ni componentes vacíos: el lockfile se abre/crea como root, así que no
+    # puede escapar de /run/lock ni colarse por rutas equivalentes en la unicidad.
+    if any(part in ("", ".", "..") for part in value.split("/")[3:]):
+        return False
+    return bool(LOCKFILE_RE.match(value))
+
+
+def _script_text(slug: str) -> str | None:
+    """Contenido de /opt/backupcsr/jobs/<slug>.sh, o None si no existe/legible."""
+    path = config.JOBS_DIR / f"{slug}.sh"
+    try:
+        if not path.is_file():
+            return None
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _script_drift(job: dict, text: str | None) -> bool:
+    """Aviso best-effort: algún token de source/dest_rel no aparece en el .sh.
+
+    En tareas multi-ruta puede marcar de más: solo informa, no bloquea.
+    """
+    if not text:
+        return False
+    # Solo el código: las rutas citadas en comentarios (p. ej. la cabecera de
+    # ruta56-web.sh) darían un falso "coincide" si el comando real cambiara.
+    code = "\n".join(line.split("#", 1)[0] for line in text.splitlines())
+    tokens = set()
+    for value in (job.get("source"), job.get("dest_rel")):
+        for token in re.split(r"[+\s]+", str(value or "")):
+            token = token.strip()
+            if token:
+                tokens.add(token)
+    return any(token not in code for token in tokens)
+
+
 def effective_jobs() -> list[dict]:
     """Catálogo + overrides de la BD; si no hay BD, usa el cron instalado."""
     jobs = catalog.catalog_jobs()
@@ -173,6 +256,10 @@ def effective_jobs() -> list[dict]:
                 "dow": installed["dow"],
             }
         merged.append(job)
+    for job in merged:
+        # size_exclude viaja como lista al frontend aunque en la BD sea texto.
+        job["size_exclude"] = catalog.split_list(job.get("size_exclude"))
+        job["tags"] = catalog.join_list(job.get("tags"), 255)
     merged.sort(key=lambda item: item.get("sort", 100))
     return merged
 
@@ -449,6 +536,22 @@ async def job_detail(slug: str, tail: int = 200, user: dict = Depends(auth.curre
     }
 
 
+@router.get("/jobs/{slug}/script")
+async def job_script(slug: str, user: dict = Depends(auth.current_user)):
+    """Script real de la tarea (solo lectura) y si la ficha coincide con él."""
+    job = find_job(slug)
+    if not job:
+        raise HTTPException(status_code=404, detail="job no encontrado")
+    text = _script_text(slug)
+    return {
+        "job": slug,
+        "path": str(config.JOBS_DIR / f"{slug}.sh"),
+        "exists": text is not None,
+        "text": text or "",
+        "drift": _script_drift(job, text),
+    }
+
+
 @router.post("/jobs/{slug}/size/refresh")
 def refresh_size(slug: str, user: dict = Depends(auth.require_admin)):
     job = find_job(slug)
@@ -480,25 +583,101 @@ async def run_job(slug: str, payload: RunIn, user: dict = Depends(auth.require_a
 @router.patch("/jobs/{slug}")
 async def update_job(slug: str, patch: JobPatch, user: dict = Depends(auth.require_admin)):
     _require_db()
-    if not config.MANAGE_CRON:
+    job = find_job(slug)
+    if not job:
+        raise HTTPException(status_code=404, detail="job no encontrado")
+
+    provided = patch.model_dump(exclude_unset=True)
+    if not provided:
+        raise HTTPException(status_code=400, detail="nada que actualizar")
+    cron_part = {key: value for key, value in provided.items() if key in CRON_FIELDS}
+    meta_part = {key: value for key, value in provided.items() if key not in CRON_FIELDS}
+    if cron_part and not config.MANAGE_CRON:
         raise HTTPException(
             status_code=409,
             detail="gestión de cron deshabilitada (BACKUP_MANAGE_CRON=0)",
         )
-    if not find_job(slug):
-        raise HTTPException(status_code=404, detail="job no encontrado")
 
     updates: dict = {}
+
+    # --- Ficha: solo exige rol admin ---
+    if "name" in meta_part:
+        name = (meta_part["name"] or "").strip()
+        if not name or len(name) > 128:
+            raise HTTPException(status_code=400, detail="name inválido (1-128 caracteres)")
+        updates["name"] = name
+    if "description" in meta_part:
+        description = (meta_part["description"] or "").strip()
+        if len(description) > 255:
+            raise HTTPException(status_code=400, detail="description supera 255 caracteres")
+        updates["description"] = description
+    if "origin_type" in meta_part:
+        origin_type = (meta_part["origin_type"] or "").strip()
+        if origin_type not in catalog.ORIGIN_TYPES:
+            raise HTTPException(status_code=400, detail=f"origin_type inválido: {origin_type}")
+        updates["origin_type"] = origin_type
+    if "source" in meta_part:
+        source = (meta_part["source"] or "").strip()
+        if len(source) > 255:
+            raise HTTPException(status_code=400, detail="source supera 255 caracteres")
+        updates["source"] = source
+    if "dest_rel" in meta_part:
+        dest_rel = (meta_part["dest_rel"] or "").strip()
+        if not _valid_dest_rel(dest_rel):
+            raise HTTPException(status_code=400, detail=f"dest_rel inválido: {dest_rel}")
+        updates["dest_rel"] = dest_rel
+    if "sort" in meta_part:
+        if meta_part["sort"] is None:
+            raise HTTPException(status_code=400, detail="sort no puede ser nulo")
+        sort = int(meta_part["sort"])
+        if not 0 <= sort <= 9999:
+            raise HTTPException(status_code=400, detail="sort debe estar entre 0 y 9999")
+        updates["sort"] = sort
+    if "criticality" in meta_part:
+        criticality = (meta_part["criticality"] or "").strip()
+        if criticality not in catalog.CRITICALITIES:
+            raise HTTPException(status_code=400, detail=f"criticality inválida: {criticality}")
+        updates["criticality"] = criticality
+    if "owner" in meta_part:
+        owner = (meta_part["owner"] or "").strip()
+        if len(owner) > 128:
+            raise HTTPException(status_code=400, detail="owner supera 128 caracteres")
+        updates["owner"] = owner
+    if "retention_days" in meta_part:
+        retention = meta_part["retention_days"]
+        if retention is None:
+            updates["retention_days"] = None
+        elif int(retention) < 0:
+            raise HTTPException(status_code=400, detail="retention_days no puede ser negativo")
+        else:
+            updates["retention_days"] = int(retention)
+    if "tags" in meta_part:
+        tags = ",".join(catalog.split_list(meta_part.get("tags")))
+        if len(tags) > 255:
+            raise HTTPException(status_code=400, detail="tags supera 255 caracteres")
+        updates["tags"] = tags
+    if "size_exclude" in meta_part:
+        size_exclude = ",".join(catalog.split_list(meta_part.get("size_exclude")))
+        if len(size_exclude) > 512:
+            raise HTTPException(status_code=400, detail="size_exclude supera 512 caracteres")
+        updates["size_exclude"] = size_exclude
+    if "notes" in meta_part:
+        notes = (meta_part["notes"] or "").strip()
+        if len(notes) > 10000:
+            raise HTTPException(status_code=400, detail="notes supera 10000 caracteres")
+        updates["notes"] = notes
+
+    # --- Programación: exige BACKUP_MANAGE_CRON (ya comprobado arriba) ---
     for field in ("cron_minute", "cron_hour", "cron_dom", "cron_month", "cron_dow"):
-        value = getattr(patch, field)
-        if value is None:
-            continue
-        if not _cron_valid_field(value):
-            raise HTTPException(status_code=400, detail=f"{field} inválido: {value}")
-        updates[field] = value.strip()
-    if patch.enabled is not None:
+        if field in cron_part:
+            value = cron_part[field] or ""
+            if not _cron_valid_field(value):
+                raise HTTPException(status_code=400, detail=f"{field} inválido: {value}")
+            updates[field] = value.strip()
+    if cron_part.get("enabled") is not None:
+        enabled = bool(cron_part["enabled"])
         script = config.JOBS_DIR / f"{slug}.sh"
-        if patch.enabled and not script.exists():
+        if enabled and not script.exists():
             raise HTTPException(
                 status_code=409,
                 detail=(
@@ -506,14 +685,35 @@ async def update_job(slug: str, patch: JobPatch, user: dict = Depends(auth.requi
                     "(créalo e instálalo antes de darle horario)"
                 ),
             )
-        updates["enabled"] = 1 if patch.enabled else 0
+        updates["enabled"] = 1 if enabled else 0
+    if "lockfile" in cron_part:
+        lockfile = (cron_part["lockfile"] or "").strip()
+        if lockfile:
+            if not _valid_lockfile(lockfile):
+                raise HTTPException(
+                    status_code=400,
+                    detail="lockfile inválido: debe ser una ruta absoluta bajo /run/lock/",
+                )
+            row = db.query(
+                "SELECT slug FROM jobs WHERE lockfile=%s AND slug<>%s",
+                (lockfile, slug),
+                one=True,
+            )
+            if row:
+                raise HTTPException(status_code=409, detail=f"lockfile ya lo usa {row['slug']}")
+            updates["lockfile"] = lockfile
+        else:
+            updates["lockfile"] = f"/run/lock/backupcsr-{slug}.lock"
+
     if not updates:
         raise HTTPException(status_code=400, detail="nada que actualizar")
 
     assignments = ", ".join(f"{field}=%s" for field in updates)
     db.execute(f"UPDATE jobs SET {assignments} WHERE slug=%s", (*updates.values(), slug))
 
-    cronfile.write(effective_jobs())
+    # Solo se reescribe el cron si cambió algo del disparo; la ficha no lo toca.
+    if any(field in updates for field in CRON_FIELDS):
+        cronfile.write(effective_jobs())
     audit(user["username"], "update-job", slug, updates)
     return {"ok": True, "job": next(j for j in collect_jobs() if j["slug"] == slug)}
 

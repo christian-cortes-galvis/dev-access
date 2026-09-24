@@ -10,6 +10,18 @@ import { sparkline, barList, emptyChart, diskGauge } from '../chart.js';
 
 let ctxRef = null;
 
+/* Etiquetas y criticidad de la ficha (campos nuevos): la lista viaja como texto
+   separado por comas desde el API. */
+function tagList(value) {
+  if (Array.isArray(value)) return value;
+  return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function critClass(value) {
+  const crit = String(value || 'media');
+  return crit === 'alta' ? 'pill-err' : crit === 'baja' ? 'pill-unknown' : 'pill-warn';
+}
+
 function kpi(label, value, sub, extra) {
   return el('div', { class: 'col' }, [
     el('div', { class: 'card kpi h-100 ' + (extra || '') }, [
@@ -220,10 +232,20 @@ function renderSummary(state) {
 
 function jobRow(job) {
   const tr = el('tr', { class: 'clickable', 'data-slug': job.slug, tabindex: '0' });
-  tr.appendChild(el('td', {}, [
-    el('div', { class: 'fw-semibold', text: job.name }),
+  const tags = tagList(job.tags);
+  const first = el('td', {}, [
+    el('div', { class: 'fw-semibold' }, [
+      el('span', { text: job.name }),
+      el('span', {
+        class: 'badge rounded-pill ms-1 ' + critClass(job.criticality),
+        title: 'Criticidad: ' + (job.criticality || 'media'),
+        text: job.criticality || 'media',
+      }),
+    ]),
     el('div', { class: 'muted mono', text: job.slug + ' · ' + (job.origin_type || '') }),
-  ]));
+  ]);
+  if (tags.length) first.appendChild(el('div', { class: 'muted small', text: tags.join(', ') }));
+  tr.appendChild(first);
   const statusCell = el('td', {}, [pill(job.status, job.status_detail)]);
   tr.appendChild(statusCell);
 
@@ -319,6 +341,9 @@ function updateActionbar() {
   setButton('log', !!job, { title: 'Ver el log de la tarea' });
   setButton('history', !!job, { title: 'Ver ejecuciones de la tarea' });
   setButton('files', !!job, { title: 'Explorar el destino en el NAS' });
+  setButton('ficha', !!job, {
+    title: isAdmin ? 'Ver/editar la ficha completa de la tarea' : 'Ver la ficha de la tarea',
+  });
   setButton('schedule', !!job && canManage, {
     title: canManage ? 'Editar el horario' : 'Requiere admin y BACKUP_MANAGE_CRON=1',
   });
@@ -359,8 +384,8 @@ function renderJobs(state) {
   const jobs = Array.isArray(state.jobs) ? state.jobs : [];
   const term = String(state.jobsSearch || '').trim().toLowerCase();
   const rows = term
-    ? jobs.filter((job) => String(job.name || '').toLowerCase().includes(term)
-      || String(job.slug || '').toLowerCase().includes(term))
+    ? jobs.filter((job) => [job.name, job.slug, job.tags, job.owner, job.notes]
+      .join(' ').toLowerCase().includes(term))
     : jobs;
 
   // La selección solo se conserva si la tarea sigue existiendo.
@@ -451,8 +476,10 @@ async function handleAction(action) {
     } else if (action === 'files') {
       ctxRef.state.filesJob = slug;
       ctxRef.go('archivos');
+    } else if (action === 'ficha') {
+      ctxRef.openSchedule(job, 'general');
     } else if (action === 'schedule') {
-      ctxRef.openSchedule(job);
+      ctxRef.openSchedule(job, 'programacion');
     }
   } catch (err) {
     toast('Error: ' + err.message, 'err');

@@ -49,7 +49,15 @@ const ctx = {
   confirmDialog,
   openLog,
   openRun,
-  openSchedule: (job) => openEditor(job, state.manageCron && state.user && state.user.role === 'admin'),
+  openSchedule: (job, tab) => {
+    ensureMounted(schedule);
+    const isAdmin = !!(state.user && state.user.role === 'admin');
+    openEditor(job, {
+      isAdmin: isAdmin,
+      canManage: isAdmin && !!state.manageCron,
+      tab: tab || 'programacion',
+    });
+  },
   openPassword,
 };
 
@@ -333,6 +341,16 @@ function safeRender(view) {
   }
 }
 
+function ensureMounted(view) {
+  if (mounted[view.id]) return;
+  try {
+    view.mount(ctx);
+  } catch (err) {
+    console.error('mount ' + view.id, err);
+  }
+  mounted[view.id] = true;
+}
+
 function activate(name) {
   const view = VIEWS.filter((v) => v.id === name)[0] || panel;
   if (view.admin && (!state.user || state.user.role !== 'admin')) return activate('panel');
@@ -345,14 +363,7 @@ function activate(name) {
     link.classList.toggle('active', link.getAttribute('data-view') === view.id);
   });
   renderBreadcrumb(view.id);
-  if (!mounted[view.id]) {
-    try {
-      view.mount(ctx);
-    } catch (err) {
-      console.error('mount ' + view.id, err);
-    }
-    mounted[view.id] = true;
-  }
+  ensureMounted(view);
   safeRender(view);
   refreshBanner();
   if (view.id === 'panel' && !state.seriesLoaded) {

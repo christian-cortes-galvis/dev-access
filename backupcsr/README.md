@@ -54,11 +54,13 @@ Antes de instalar, colocar los secretos (no versionados):
 | `latino-bd` | SFTP `LATINO_HOST:2200` `/home/chequeos/taskManager/backupsAutomaticos` | `latino/backupsAutomaticos` |
 | `ruta56-bd` | FTP `taskManager/ruta56` | `ruta56` (excluye `storage`) |
 | `ruta56-web` | FTP `ruta56/storage` | `ruta56/storage/app` |
+| `latino-web` | SFTP `LATINO_HOST:2200` `/home/chequeos/EDUCACION` y `/home/chequeos/DARUMA` | `latino-web/educacion` y `latino-web/daruma302.socimedicostools.info` |
 | `gastro-bd` | FTP `taskManager/gastro` | `gastro` |
 | `enter-bd` | FTP `taskManager/pedidos` | `pedidos` |
 
 Los `*-bd` corren cada hora de 6 a 19 con los minutos **escalonados** (`2`, `14`, `26`,
-`38`, `50`); los `*-web` 3 veces al día (`20 6,13,19 * * *`). `flock` evita solapes. El mirror
+`38`, `50`); los `*-web` 3 veces al día (`6,13,19`), `ruta56-web` a los `:20` y `latino-web`
+a los `:8` para no coincidir. `flock` evita solapes. El mirror
 usa `--delete`: si el origen remoto queda incompleto, el destino del NAS refleja ese estado.
 
 `ruta56-bd` y `ruta56-web` comparten `/mnt/nas/ruta56`; por eso `ruta56-bd` excluye `storage`
@@ -91,19 +93,19 @@ entran al cron, ni al validador, ni se miden en el panel (y el portal no avisa p
 
 | Tarea | Origen | Destino | Por qué quedó fuera |
 |-------|--------|---------|---------------------|
-| `google-web` | SFTP `GOOGLE_WEB_HOST` `/var/www/html/historiasclinicas/files` | `files` (provisional) | Publicaba a OneDrive (vetado) |
-| `latino-web` | SFTP `LATINO_HOST:2200`, ruta por confirmar | por confirmar | Publicaba a OneDrive (vetado) |
+| `google-web` | SFTP `GOOGLE_WEB_HOST` `/var/www/html/centro-apoyo/assets`, `/var/www/html/sapg/assets` y `/var/www/html/historiasclinicas/files` | `google-web` | Publicaba a OneDrive (vetado); script corregido, sigue deshabilitado |
 | `ticware-bd` | FTP `TICWARE_HOST`, ruta por confirmar | por confirmar | Ticware no debe llenar el NAS |
 | `ticware-web` | FTP `TICWARE_HOST`, ruta por confirmar | por confirmar | Ticware no debe llenar el NAS |
 
 `borrar_lista.sh` (limpieza destructiva con rutas del VPS) tampoco se registró: no es una copia.
 
-Para habilitar una: escribir `jobs/<slug>.sh` (usar `lib/common.sh` como los demás), ajustar
-`source`/`dest_rel` en `web/jobs.yml`, reinstalar (`sudo install -m 0755 jobs/<slug>.sh
-/opt/backupcsr/jobs/`) y habilitarla en el panel. El portal **rechaza habilitarla si falta el
-script** (`409`), para que no quede un horario apuntando a un archivo inexistente. Ojo con
-`google-web`: con `--delete` sobre `/mnt/nas/files` borraría del NAS lo que aún no esté en el
-VPS; revisar ese destino antes de activarla.
+Para habilitar una: ajustar `source`/`dest_rel` en `web/jobs.yml`, reinstalar (`sudo install -m
+0755 jobs/<slug>.sh /opt/backupcsr/jobs/`) y habilitarla en el panel. El portal **rechaza
+habilitarla si falta el script** (`409`), para que no quede un horario apuntando a un archivo
+inexistente. Ojo con `google-web`: ya tiene script corregido (espeja a `/mnt/nas/google-web`);
+si se habilita, revisar antes el destino (con `--delete` borraría del NAS lo que aún no esté en
+el VPS) y, para conservar el flujo de `subir-historiasclinicas`, apuntar su `SRC_DIR` a
+`/mnt/nas/google-web/historiasClinicas/files`.
 
 ## Validación
 

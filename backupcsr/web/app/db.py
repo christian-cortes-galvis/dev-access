@@ -62,6 +62,39 @@ def last_error() -> str | None:
     return _last_error
 
 
+# Columnas añadidas después de la primera versión del esquema. `CREATE TABLE IF NOT
+# EXISTS` no las agrega a una tabla `jobs` ya creada y MySQL no admite
+# `ADD COLUMN IF NOT EXISTS`, así que se comprueba information_schema y se altera
+# solo lo que falta (idempotente).
+_JOB_COLUMNS = (
+    ("criticality", "ENUM('alta','media','baja') NOT NULL DEFAULT 'media'"),
+    ("owner", "VARCHAR(128) NOT NULL DEFAULT ''"),
+    ("retention_days", "INT UNSIGNED NULL"),
+    ("tags", "VARCHAR(255) NOT NULL DEFAULT ''"),
+    ("size_exclude", "VARCHAR(512) NOT NULL DEFAULT ''"),
+    ("notes", "TEXT NULL"),
+)
+
+
+def _ensure_columns(cur, table: str, columns) -> list[str]:
+    cur.execute(
+        """
+        SELECT COLUMN_NAME AS name
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = %s
+        """,
+        (table,),
+    )
+    present = {row["name"] for row in cur.fetchall()}
+    added = []
+    for name, ddl in columns:
+        if name in present:
+            continue
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+        added.append(name)
+    return added
+
+
 def init_schema() -> None:
     sql = config.SCHEMA_PATH.read_text(encoding="utf-8")
     # Quita comentarios de línea ANTES de separar por ';': si un comentario
@@ -73,6 +106,9 @@ def init_schema() -> None:
     with cursor() as cur:
         for statement in statements:
             cur.execute(statement)
+        added = _ensure_columns(cur, "jobs", _JOB_COLUMNS)
+    if added:
+        log.info("columnas añadidas a jobs: %s", ", ".join(added))
 
 
 def query(sql: str, params=None, one: bool = False):

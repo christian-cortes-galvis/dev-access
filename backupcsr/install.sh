@@ -178,12 +178,22 @@ chmod 600 "$ETC_DIR/credentials.env" "$ETC_DIR/nas.creds"
 
 # El cron instalado es la verdad para el estado; la BD del portal es el horario editable.
 # Al copiar este cron la BD puede quedar desviada (p. ej. el `:20` viejo) y el panel marcaría
-# TARDE a jobs que sí corren: se adopta el cron en la BD. Best-effort: si el portal todavía no
-# está desplegado (no existe el venv), solo se avisa.
+# TARDE a jobs que sí corren: se sincroniza el catálogo (inserta jobs nuevos y refresca
+# metadata) y se adopta el cron en la BD. OJO: `sync-jobs` nunca cambia `enabled` de filas
+# existentes, así que `adopt-cron` avisa si el cron dispara un job que la BD tiene enabled=0.
+# Con BACKUP_MANAGE_CRON=1 el cron se genera desde la BD, así que además se regenera: evita
+# que el cron dispare un job que la BD tiene deshabilitado (y que un guardado posterior lo
+# borre de golpe). Best-effort: si el portal todavía no está desplegado (no existe el venv) o
+# la gestión está desactivada, solo se avisa.
 if [ -x "$OPT_DIR/web/venv/bin/python" ] && [ -f "$ETC_DIR/web.env" ]; then
 	if ( cd "$OPT_DIR/web" && set -a && . "$ETC_DIR/web.env" && set +a \
+		&& venv/bin/python -m app.cli sync-jobs \
 		&& venv/bin/python -m app.cli adopt-cron ); then
-		:
+		if grep -qE '^[[:space:]]*(export[[:space:]]+)?BACKUP_MANAGE_CRON=1' "$ETC_DIR/web.env"; then
+			( cd "$OPT_DIR/web" && set -a && . "$ETC_DIR/web.env" && set +a \
+				&& venv/bin/python -m app.cli render-cron --apply ) \
+				|| echo "ADVERTENCIA: no se pudo regenerar el cron desde la BD" >&2
+		fi
 	else
 		echo "ADVERTENCIA: no se pudo reconciliar la BD con el cron instalado" >&2
 	fi
@@ -223,10 +233,11 @@ cat <<'NEXT'
 
 Instalación lista (scripts, credenciales, cron, logrotate y NAS).
 
-Los jobs activos (ruta56-bd, ruta56-web, gastro-bd, enter-bd, google-bd, latino-bd)
-espejan el origen remoto DIRECTO a su ruta final en el NAS (/mnt/nas). NO hay staging local:
-los jobs abortan con require_nas si el NAS no está montado, para no escribir en /.
-google-bd y latino-bd usan /etc/backupcsr/keys/{google,latino}.
+Los jobs activos (ruta56-bd, ruta56-web, gastro-bd, enter-bd, google-bd, latino-bd,
+latino-web) espejan el origen remoto DIRECTO a su ruta final en el NAS (/mnt/nas). NO hay
+staging local: los jobs abortan con require_nas si el NAS no está montado, para no escribir
+en /.
+google-bd, latino-bd y latino-web usan /etc/backupcsr/keys/{google,latino}.
 
 Pasos siguientes:
 

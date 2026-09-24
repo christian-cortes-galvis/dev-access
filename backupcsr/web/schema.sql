@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS jobs (
   cron_month VARCHAR(32) NOT NULL DEFAULT '*',
   cron_dow VARCHAR(32) NOT NULL DEFAULT '*',
   sort INT NOT NULL DEFAULT 100,
+  criticality ENUM('alta','media','baja') NOT NULL DEFAULT 'media',
+  owner VARCHAR(128) NOT NULL DEFAULT '',
+  retention_days INT UNSIGNED NULL,
+  tags VARCHAR(255) NOT NULL DEFAULT '',
+  size_exclude VARCHAR(512) NOT NULL DEFAULT '',
+  notes TEXT NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_jobs_slug (slug)

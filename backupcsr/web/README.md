@@ -11,8 +11,10 @@ con `backups.cortexdev.win`/`pbs`, que es Proxmox Backup Server).
   con estado (OK / EN CURSO / TARDE / FALLÓ / NUNCA / DESHABILITADA), tamaño, última y próxima
   ejecución.
   La tabla **no repite botones por fila**: se selecciona una fila y las acciones (ejecutar real,
-  `DRY_RUN`, **reintentar**, log, historial, archivos, horario, habilitar/deshabilitar) se aplican
-  desde una única barra superior estilo DataTables *Buttons*, con iconos Font Awesome.
+  `DRY_RUN`, **reintentar**, log, historial, archivos, **ficha**, horario, habilitar/deshabilitar)
+  se aplican desde una única barra superior estilo DataTables *Buttons*, con iconos Font Awesome.
+  Cada fila muestra la **criticidad** (badge) y las **etiquetas**, y el buscador filtra además por
+  etiquetas, responsable y notas (ver [Ficha de la tarea](#ficha-de-la-tarea)).
 - **Tamaño (GB) por tarea**: recorrido cacheado del destino de cada job en `/mnt/nas`, con
   histórico (`size_snapshots`) para ver crecimiento. `ruta56-bd` excluye `storage` (`size_exclude`
   en `jobs.yml`) para no contar dos veces el árbol compartido con `ruta56-web`.
@@ -21,8 +23,10 @@ con `backups.cortexdev.win`/`pbs`, que es Proxmox Backup Server).
 - **Archivos**: navegador de `/mnt/nas` por job, con tamaño medido y **gestión** (admin):
   nueva carpeta, renombrar, mover, subir, descargar y eliminar, con confirmación y auditoría.
   Ver [Gestión de archivos](#gestión-de-archivos-pestaña-archivos).
-- **Programación**: habilitar, deshabilitar y editar el horario con **presets y previsualización**
-  de las próximas 5 ejecuciones; con la gestión activa reescribe `/etc/cron.d/backupcsr`.
+- **Programación**: el editor de tarea tiene dos pestañas: **General** (la ficha, ver
+  [Ficha de la tarea](#ficha-de-la-tarea)) y **Programación** (habilitar/deshabilitar, cron y
+  `lockfile`, con **presets y previsualización** de las próximas 5 ejecuciones); con la gestión
+  activa reescribe `/etc/cron.d/backupcsr`.
   Una tarea `enabled: false` en `jobs.yml` se lista con la etiqueta *deshabilitada*, sin línea en el
   cron, sin alertas y sin medición de tamaño; el portal **no deja habilitarla si falta
   `/opt/backupcsr/jobs/<slug>.sh`** (`409`). Así se registran tareas que hoy no corren (ver
@@ -133,6 +137,26 @@ cd /opt/backupcsr/web && venv/bin/python -m app.cli create-admin --username admi
 `tools/validar-copias.sh` sigue leyendo el cron generado y ahora además avisa si dos jobs
 comparten minuto (señal de que el cron se reescribió con una BD desviada).
 
+### Ficha de la tarea
+
+Cada tarea tiene una ficha editable (pestaña **General** del editor, y botón **Ficha** en el Panel):
+
+- **Descriptivos**: nombre, descripción y orden.
+- **Operativos**: tipo de origen, origen y destino. `lockfile` vive en la pestaña *Programación*
+  porque cambia el comando del cron. El **script real** (`/opt/backupcsr/jobs/<slug>.sh`) es el que
+  manda en la ejecución: el editor muestra una sección *Ver script real* y avisa (best-effort) si el
+  origen o el destino de la ficha no aparecen en el script; en tareas multi-ruta el aviso puede
+  sobrar, por eso solo informa.
+- **Nuevos**: criticidad (alta/media/baja), responsable, retención (días), etiquetas, exclusiones de
+  tamaño y notas.
+
+Permisos: la **ficha** la edita cualquier `admin` sin necesidad de `BACKUP_MANAGE_CRON`; habilitar,
+cron y `lockfile` exigen `admin` **y** `BACKUP_MANAGE_CRON=1`. Un `viewer` solo puede verla.
+
+Autoridad: **la BD manda tras el alta**. `sync-jobs` inserta las tareas nuevas desde `jobs.yml` y en
+las existentes no pisa la ficha (ni `enabled`/cron); los campos nuevos se siembran del YAML solo si
+están vacíos (así una instalación anterior hereda `size_exclude: storage` de `ruta56-bd`).
+
 ### Horario: el cron instalado manda
 
 El **cron instalado** (`/etc/cron.d/backupcsr`) es la fuente de verdad del **estado** y de la
@@ -156,8 +180,10 @@ Todo bajo `/api/`, con sesión salvo `/api/health` y `/api/auth/login`.
 
 - `GET /api/health`, `GET /api/summary`, `GET /api/jobs`, `GET /api/jobs/{slug}`
 - `GET /api/sizes?days=30` (series de tamaño), `POST /api/jobs/{slug}/size/refresh` (admin)
-- `POST /api/jobs/{slug}/run` `{dry_run,retry}` (admin), `PATCH /api/jobs/{slug}` (admin),
-  `POST /api/jobs/{slug}/reset-schedule` (admin), `GET /api/jobs/{slug}/cron-preview` (admin)
+- `POST /api/jobs/{slug}/run` `{dry_run,retry}` (admin), `PATCH /api/jobs/{slug}` (admin; la ficha
+  solo exige admin, `enabled`/cron/`lockfile` exigen `MANAGE_CRON`),
+  `POST /api/jobs/{slug}/reset-schedule` (admin), `GET /api/jobs/{slug}/cron-preview` (admin),
+  `GET /api/jobs/{slug}/script` (script real en solo lectura + `drift`)
 - `GET /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/log`,
   `GET /api/runs/export?format=csv|json` (filtros `job`, `status`, `desde`, `hasta`)
 - `GET /api/files`, `GET /api/jobs/{slug}/files`, `GET /api/cron`
