@@ -11,7 +11,7 @@ settings:
 categories:
   - slug: infraestructura
     title: Infraestructura
-    description: Portainer, Proxmox VE, Proxmox Backup Server, Pi-hole, Uptime Kuma, Grafana y Netdata (uno por servidor).
+    description: Portainer, Proxmox VE, Proxmox Backup Server, Pi-hole, Uptime Kuma, Grafana, Netdata (uno por servidor) y el monitor UPS (APC).
     url: /infraestructura.html
     note_header: Destino
     count_label: servicios
@@ -71,6 +71,15 @@ services:
     badge: false
     note: 'PBS 192.168.0.166:8007 &middot; alias <a href="https://pbs.cortexdev.win" target="_blank" rel="noopener">pbs</a>'
     sort: 30
+  - slug: ups
+    name: "Monitor UPS (APC)"
+    category: infraestructura
+    url: https://ups.cortexdev.win
+    probe_url: https://ups.cortexdev.win/healthz
+    accept: [200]
+    icon: ups.png
+    note: "APC Back-UPS RS 1500M2 en 192.168.0.224 &middot; NUT (estado, autonom&iacute;a e historial)"
+    sort: 45
   - slug: pihole
     name: Pi-hole
     category: infraestructura

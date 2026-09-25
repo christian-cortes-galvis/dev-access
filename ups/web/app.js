@@ -641,7 +641,7 @@
       const batt = ev.battery_start != null || ev.battery_end != null
         ? `Batería ${ev.battery_start != null ? Math.round(ev.battery_start) + "%" : "—"} &rarr; ${ev.battery_end != null ? Math.round(ev.battery_end) + "%" : "—"}`
         : "Batería: —";
-      const load = ev.load_avg_pct != null ? `${Math.round((ev.load_avg_pct * power) / 100)} W promedio` : "";
+      const load = power && ev.load_avg_pct != null ? `${Math.round((ev.load_avg_pct * power) / 100)} W promedio` : "";
       const card = document.createElement("div");
       card.className = `power-event${ev.ongoing ? " ongoing" : ""}`;
       card.innerHTML = `${icon(ev.ongoing ? "alert" : "power")}
@@ -657,9 +657,10 @@
   async function loadPowerEvents() {
     try {
       const res = await fetch(`/api/power-events?range=${state.range}`).then((r) => r.json());
-      renderPowerEvents(res.events, state.nominalPower);
+      const realPower = state.summary && state.summary.realpower_nominal;
+      renderPowerEvents(res.events, realPower);
     } catch (_) {
-      renderPowerEvents([], state.nominalPower);
+      renderPowerEvents([]);
     }
   }
 

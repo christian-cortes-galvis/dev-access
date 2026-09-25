@@ -110,6 +110,22 @@
     return img;
   }
 
+  function headIcon(s) {
+    if (s.icon) return cardIcon(s);
+    var tech = (s.tech || [])[0];
+    if (!tech) return null;
+    var img = document.createElement('img');
+    img.className = 'app-icon card-app';
+    img.src = '/icons/' + tech + '.svg';
+    img.alt = '';
+    img.title = s.name;
+    img.loading = 'lazy';
+    img.onerror = function () {
+      if (this.parentNode) this.parentNode.removeChild(this);
+    };
+    return img;
+  }
+
   function card(s) {
     var col = document.createElement('div');
     col.className = 'col';
@@ -119,15 +135,14 @@
     link.href = s.url;
     link.target = '_blank';
     link.rel = 'noopener';
-    var tech = (s.tech || []).join(',');
-    if (tech) link.setAttribute('data-tech', tech);
 
     var body = document.createElement('div');
     body.className = 'card-body';
 
     var head = document.createElement('div');
     head.className = 'card-head';
-    if (s.icon) head.appendChild(cardIcon(s));
+    var hi = headIcon(s);
+    if (hi) head.appendChild(hi);
 
     var title = document.createElement('h3');
     title.className = 'h6 card-title';
