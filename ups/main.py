@@ -103,6 +103,21 @@ async def api_history(metric: str = Query(...), range: str = Query("24h")):
     }
 
 
+ON_BATTERY_TOKENS = {"OB", "DISCHRG", "LB"}
+
+
+def _is_on_battery(status):
+    return bool(set((status or "").upper().split()) & ON_BATTERY_TOKENS)
+
+
+def _first_last_avg(metric, start, end):
+    points = db.history(metric, start, end)
+    values = [p[1] for p in points if p[1] is not None]
+    if not values:
+        return None, None, None
+    return values[0], values[-1], sum(values) / len(values)
+
+
 @app.get("/api/events")
 async def api_events(range: str = Query("7d")):
     if range not in RANGES:
@@ -112,7 +127,53 @@ async def api_events(range: str = Query("7d")):
     for row in rows:
         row["to_class"] = collector.status_class(row.get("to_status"))
         row["from_class"] = collector.status_class(row.get("from_status"))
+        row["to_label"] = collector.status_label(row.get("to_status"))
+        row["from_label"] = collector.status_label(row.get("from_status"))
     return {"range": range, "events": rows}
+
+
+@app.get("/api/power-events")
+async def api_power_events(range: str = Query("30d")):
+    if range not in RANGES:
+        raise HTTPException(status_code=400, detail="rango invalido")
+    now = int(time.time())
+    since = now - RANGES[range]
+    rows = await asyncio.to_thread(db.events, since)
+    intervals = []
+    open_start = None
+    for row in reversed(rows):
+        ts = row.get("ts")
+        if _is_on_battery(row.get("to_status")) and not _is_on_battery(row.get("from_status")):
+            if open_start is None:
+                open_start = ts
+        elif open_start is not None and not _is_on_battery(row.get("to_status")):
+            intervals.append((open_start, ts))
+            open_start = None
+    if open_start is not None:
+        intervals.append((open_start, None))
+
+    events = []
+    for started_at, ended_at in intervals:
+        window_end = ended_at or now
+        battery_start, battery_end, _ = await asyncio.to_thread(
+            _first_last_avg, "battery_charge", started_at, window_end
+        )
+        _, _, load_avg = await asyncio.to_thread(
+            _first_last_avg, "ups_load", started_at, window_end
+        )
+        events.append(
+            {
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "duration_s": window_end - started_at,
+                "ongoing": ended_at is None,
+                "battery_start": battery_start,
+                "battery_end": battery_end,
+                "load_avg_pct": load_avg,
+            }
+        )
+    events.reverse()
+    return {"range": range, "events": events}
 
 
 @app.websocket("/api/ws")

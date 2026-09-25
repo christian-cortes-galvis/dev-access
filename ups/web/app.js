@@ -6,6 +6,26 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+  const svg = (body) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+  const ICONS = {
+    battery: svg('<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/><path d="M6 10v4M10 10v4"/>'),
+    bolt: svg('<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/>'),
+    gauge: svg('<path d="M12 14 8 8"/><path d="M3.5 18a9 9 0 1 1 17 0"/>'),
+    plug: svg('<path d="M9 2v6M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-12 0V8Z"/><path d="M12 17v5"/>'),
+    server: svg('<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>'),
+    database: svg('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>'),
+    shield: svg('<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/>'),
+    alert: svg('<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>'),
+    clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    power: svg('<path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/>'),
+    grid: svg('<path d="M9 2v20M15 2v20M3 8h18M3 16h18"/>'),
+    usb: svg('<path d="M12 21V7"/><path d="m8 11 4-4 4 4"/><circle cx="12" cy="4" r="2"/>'),
+    check: svg('<path d="M20 6 9 17l-5-5"/>'),
+    x: svg('<path d="M18 6 6 18M6 6l12 12"/>'),
+  };
+  const icon = (name) => `<span class="ico" aria-hidden="true">${ICONS[name] || ""}</span>`;
+  const onBattery = (status) => /(^|\s)(OB|DISCHRG|LB)(\s|$)/.test((status || "").toUpperCase());
+
   const LIVE_RANGES = new Set(["1h", "6h", "24h"]);
   const MAX_POINTS = 900;
   const DEFAULT_METRICS = ["battery_charge", "battery_runtime", "ups_load", "input_voltage", "battery_voltage"];
@@ -26,6 +46,8 @@
     nominalPower: 900,
     wsConnected: false,
     view: "dashboard",
+    lastStatus: null,
+    reconnectStep: 0,
     theme: localStorage.getItem("nut-theme") || "dark",
     metricKeys: DEFAULT_METRICS,
     colors: Object.assign({}, FALLBACK_COLORS),
@@ -33,14 +55,14 @@
 
   function statusFromTokens(status) {
     const s = (status || "").toUpperCase();
-    if (!s) return { label: "DESCONOCIDO", className: "muted" };
+    if (!s) return { label: "DESCONOCIDO", className: "muted", icon: "x" };
     const tokens = new Set(s.split());
-    if (tokens.has("OB") || tokens.has("DISCHRG")) return { label: "EN BATERÍA", className: "warn" };
-    if (tokens.has("LB")) return { label: "BATERÍA BAJA", className: "bad" };
-    if (tokens.has("OFF") || tokens.has("FSD") || tokens.has("OL") === false && tokens.has("CHRG") === false && tokens.size === 0) return { label: "SIN CONEXIÓN", className: "bad" };
-    if (tokens.has("OVER") || tokens.has("ALARM")) return { label: "CRÍTICO", className: "bad" };
-    if (tokens.has("BOOST") || tokens.has("TRIM") || tokens.has("BYPASS")) return { label: "ADVERTENCIA", className: "warn" };
-    return { label: "EN LÍNEA", className: "ok" };
+    if (tokens.has("OB") || tokens.has("DISCHRG")) return { label: "EN BATERÍA", className: "warn", icon: "battery" };
+    if (tokens.has("LB")) return { label: "BATERÍA BAJA", className: "bad", icon: "battery" };
+    if (tokens.has("OFF") || tokens.has("FSD")) return { label: "SIN CONEXIÓN", className: "bad", icon: "power" };
+    if (tokens.has("OVER") || tokens.has("ALARM")) return { label: "CRÍTICO", className: "bad", icon: "alert" };
+    if (tokens.has("BOOST") || tokens.has("TRIM") || tokens.has("BYPASS")) return { label: "ADVERTENCIA", className: "warn", icon: "alert" };
+    return { label: "EN LÍNEA", className: "ok", icon: "check" };
   }
 
   function fmtTime(ts, range) {
@@ -92,9 +114,6 @@
     $("batt").classList.toggle("pulse", onBattery || s.status_class === "bad");
     $("runtime").textContent = s.runtime_human || "--:--:--";
     $("runtimeSub").textContent = s.watts_est ? `Basado en consumo actual de ${Math.round(s.watts_est)} W` : "Basado en consumo actual.";
-    $("heroStatus").textContent = s.status_label || "—";
-    $("inputVoltage").textContent = s.input_voltage != null ? `${Number(s.input_voltage).toFixed(0)} V` : "—";
-    $("loadValue").textContent = s.load != null ? `${Number(s.load).toFixed(0)}%` : "—";
   }
 
   function renderMarks(s) {
@@ -116,10 +135,10 @@
   }
 
   const KPI_DEFS = [
-    { key: "battery_charge", label: "Batería", unit: "%", decimals: 0, bar: "floor", accent: "battery_charge", sub: (s) => (s.battery_charge != null ? `${s.battery_charge.toFixed(0)}% disponible` : "Estado de batería") },
-    { key: "load", label: "Carga", unit: "%", decimals: 0, bar: "ceil", barWarn: 70, barBad: 90, accent: "ups_load", sub: (s) => (s.load != null ? `${s.load.toFixed(0)}% de capacidad` : "Carga actual") },
-    { key: "watts_est", label: "Potencia", unit: "W", decimals: 0, accent: "ups_load", sub: (s) => (s.realpower_nominal ? `${s.realpower_nominal} W nominal` : "Consumo") },
-    { key: "input_voltage", label: "Entrada", unit: "V", decimals: 1, accent: "input_voltage", sub: (s) => (s.transfer_low && s.transfer_high ? `${s.transfer_low}–${s.transfer_high} V de rango` : "Voltaje de entrada") },
+    { key: "battery_charge", label: "Batería", unit: "%", decimals: 0, bar: "floor", accent: "battery_charge", icon: "battery", sub: (s) => (s.battery_charge != null ? `${s.battery_charge.toFixed(0)}% disponible` : "Estado de batería") },
+    { key: "load", label: "Carga", unit: "%", decimals: 0, bar: "ceil", barWarn: 70, barBad: 90, accent: "ups_load", icon: "gauge", sub: (s) => (s.load != null ? `${s.load.toFixed(0)}% de capacidad` : "Carga actual") },
+    { key: "watts_est", label: "Potencia", unit: "W", decimals: 0, accent: "ups_load", icon: "bolt", sub: (s) => (s.realpower_nominal ? `${s.realpower_nominal} W nominal` : "Consumo") },
+    { key: "input_voltage", label: "Entrada", unit: "V", decimals: 1, accent: "input_voltage", icon: "plug", sub: (s) => (s.transfer_low && s.transfer_high ? `${s.transfer_low}–${s.transfer_high} V de rango` : "Voltaje de entrada") },
   ];
 
   function valueFor(def, s) {
@@ -138,11 +157,12 @@
 
       const label = document.createElement("span");
       label.className = "k-label";
-      if (def.accent) {
-        const dot = document.createElement("i");
-        dot.className = "dot";
-        dot.style.background = state.colors[def.accent] || cssVar("--accent");
-        label.appendChild(dot);
+      if (def.icon) {
+        const ic = document.createElement("span");
+        ic.className = "k-ico";
+        ic.innerHTML = ICONS[def.icon] || "";
+        if (def.accent) ic.style.color = state.colors[def.accent] || cssVar("--accent");
+        label.appendChild(ic);
       }
       label.appendChild(document.createTextNode(def.label));
 
@@ -224,6 +244,8 @@
     const badge = $("statusBadge");
     badge.dataset.class = status.className;
     $("statusText").textContent = status.label;
+    const statusIcon = $("statusIcon");
+    if (statusIcon) statusIcon.innerHTML = ICONS[status.icon] || "";
     document.body.dataset.status = status.className;
     $("statusLabel").textContent = status.label;
     $("powerFlowState").textContent = status.label;
@@ -233,7 +255,8 @@
     const usbState = s.ts && !s.stale ? "Conectado" : "Desconectado";
     $("usbState").textContent = usbState;
     $("nutState").textContent = s.ts && !s.stale ? "En marcha" : "Desconectado";
-    $("pveState").textContent = "No monitoreado";
+    const pveState = $("pveState");
+    if (pveState) pveState.textContent = serviceState((s.services || {}).pve).text;
   }
 
   function updatePowerFlow(s) {
@@ -252,38 +275,60 @@
     powerFlowState.style.color = status.className === "bad" ? cssVar("--bad") : status.className === "warn" ? cssVar("--warn") : cssVar("--ok");
   }
 
+  function serviceState(svc) {
+    if (!svc || !svc.state || svc.state === "unknown") return { text: "No monitoreado", cls: "muted" };
+    if (svc.state === "online" || svc.state === "auth") return { text: "En línea", cls: "ok" };
+    return { text: "Caído", cls: "bad" };
+  }
+
   function renderSystemStatus(s) {
     const status = statusFromTokens(s.status || s.status_label);
+    const svc = s.services || {};
+    const pve = serviceState(svc.pve);
+    const pbs = serviceState(svc.pbs);
+    const storage = serviceState(svc.storage);
+    const nutOk = Boolean(s.ts && !s.stale);
     const items = [
-      ["UPS", status.label],
-      ["NUT", s.ts && !s.stale ? "En marcha" : "Desconectado"],
-      ["PVE", "No monitoreado"],
-      ["PBS", "No monitoreado"],
-      ["Almacenamiento", "No monitoreado"],
+      ["battery", "UPS", status.label, status.className],
+      ["server", "NUT", nutOk ? "En marcha" : "Desconectado", nutOk ? "ok" : "bad"],
+      ["server", "PVE", pve.text, pve.cls],
+      ["database", "PBS", pbs.text, pbs.cls],
+      ["shield", "Copias", storage.text, storage.cls],
     ];
 
     const host = $("systemStatus");
-    host.innerHTML = items.map(([name, value]) => {
-      const cls = value === "En marcha" || value === "En línea" || value === "Conectado" ? "state" : value === "Desconectado" ? "state bad" : "state muted";
-      return `<li><span>${name}</span><span class="${cls}">${value}</span></li>`;
-    }).join("");
+    host.innerHTML = items.map(([ic, name, value, cls]) =>
+      `<li>${icon(ic)}<span class="ss-name">${name}</span><span class="state ${cls}">${value}</span></li>`
+    ).join("");
   }
 
   function renderHealth(s) {
     const status = statusFromTokens(s.status || s.status_label);
     const wrap = $("healthState");
-    wrap.classList.remove("warning", "bad");
+    const pill = wrap.querySelector(".health-pill");
     const summary = $("healthSummary");
-    if (status.className === "warn") {
-      wrap.classList.add("warning");
-      $("healthState").querySelector(".health-pill").textContent = "ADVERTENCIA";
-      summary.textContent = "La UPS opera con batería o con carga elevada.";
-    } else if (status.className === "bad") {
+    wrap.classList.remove("warning", "bad");
+
+    const noData = !s.ts || s.stale;
+    const runtimeLow = typeof s.runtime_s === "number" && typeof s.runtime_low === "number" && s.runtime_s <= s.runtime_low;
+    const chargeLow = typeof s.battery_charge === "number" && s.charge_low != null && s.battery_charge <= s.charge_low;
+
+    if (noData || status.className === "bad" || runtimeLow || chargeLow) {
       wrap.classList.add("bad");
-      $("healthState").querySelector(".health-pill").textContent = "CRÍTICO";
-      summary.textContent = "La autonomía es limitada o la UPS está degradada.";
+      pill.textContent = "CRÍTICO";
+      summary.textContent = noData
+        ? "Sin comunicación con la UPS."
+        : runtimeLow
+          ? "Autonomía por debajo del mínimo configurado."
+          : chargeLow
+            ? "Batería en nivel crítico."
+            : "La UPS está degradada o desconectada.";
+    } else if (status.className === "warn" || (s.error && s.error.message)) {
+      wrap.classList.add("warning");
+      pill.textContent = "ADVERTENCIA";
+      summary.textContent = "La UPS opera con batería o con carga elevada.";
     } else {
-      $("healthState").querySelector(".health-pill").textContent = "SALUDABLE";
+      pill.textContent = "SALUDABLE";
       summary.textContent = "La UPS funciona con normalidad.";
     }
   }
@@ -301,6 +346,8 @@
       ["Transferencia baja", s.transfer_low != null ? `${Number(s.transfer_low).toFixed(0)} V` : "—"],
       ["Transferencia alta", s.transfer_high != null ? `${Number(s.transfer_high).toFixed(0)} V` : "—"],
       ["Potencia nominal", s.realpower_nominal ? `${s.realpower_nominal} W` : "—"],
+      ["Driver", s.driver_name ? `${s.driver_name}${s.driver_version ? ` ${s.driver_version}` : ""}` : "—"],
+      ["USB vendor / product", s.usb_vendorid || s.usb_productid ? `${s.usb_vendorid || "—"} / ${s.usb_productid || "—"}` : "—"],
       ["Estado", s.status_label || "Desconocido"],
     ];
     host.innerHTML = rows.map(([label, value]) => `
@@ -311,7 +358,35 @@
     `).join("");
   }
 
+  function toast(kind, title, msg) {
+    const host = $("toasts");
+    if (!host) return;
+    const el = document.createElement("div");
+    el.className = `toast ${kind}`;
+    el.setAttribute("role", "status");
+    el.innerHTML = `${icon(kind === "ok" ? "check" : "alert")}<div class="toast-body"><strong>${title}</strong><span>${msg}</span></div>`;
+    host.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("show"));
+    setTimeout(() => { el.classList.remove("show"); setTimeout(() => el.remove(), 300); }, 6000);
+  }
+
+  function detectTransitions(s) {
+    const cur = (s.status || "").toUpperCase();
+    const prev = state.lastStatus;
+    if (prev !== null && cur && cur !== prev) {
+      const nowBat = onBattery(cur);
+      const wasBat = onBattery(prev);
+      if (nowBat && !wasBat) toast("warn", "Corte de energía", "La UPS cambió a batería.");
+      else if (!nowBat && wasBat) toast("ok", "Energía restaurada", "La UPS volvió a la red eléctrica.");
+      if (/(^|\s)LB(\s|$)/.test(cur) && !/(^|\s)LB(\s|$)/.test(prev)) {
+        toast("bad", "Batería baja", "Autonomía limitada.");
+      }
+    }
+    if (cur) state.lastStatus = cur;
+  }
+
   function updateSummary(s) {
+    detectTransitions(s);
     state.summary = s;
     state.nominalPower = s.realpower_nominal || state.nominalPower;
     updateHeader(s);
@@ -463,6 +538,7 @@
     C.volt.data.datasets[1].data = picked.series.battery_voltage;
 
     Object.values(C).forEach((c) => c && c.update());
+    renderConsumptionStats(picked.series.ups_load);
     const total = picked.times.length;
     const resolution = results[0] && results[0].resolution === "hourly" ? "por hora" : "brutos";
     $("chartHint").textContent = total ? `${total} puntos · datos ${resolution}` : "Recopilando datos…";
@@ -491,7 +567,19 @@
     });
   }
 
-  const classColor = (cls) => cssVar(cls === "bad" ? "--bad" : cls === "warn" ? "--warn" : "--ok");
+  function describeTransition(from, to) {
+    const f = (from || "").toUpperCase().split(/\s+/);
+    const t = (to || "").toUpperCase().split(/\s+/);
+    const has = (arr, tok) => arr.includes(tok);
+    const fromBat = has(f, "OB") || has(f, "DISCHRG");
+    const toBat = has(t, "OB") || has(t, "DISCHRG");
+    if (has(t, "LB") && !has(f, "LB")) return { text: "Batería baja", cls: "bad" };
+    if (toBat && !fromBat) return { text: "Corte de energía detectado", cls: "warn" };
+    if (!toBat && fromBat) return { text: "Energía restaurada", cls: "ok" };
+    if (has(t, "OVER")) return { text: "Sobrecarga", cls: "bad" };
+    if (has(t, "TRIM") || has(t, "BOOST")) return { text: "Regulación de voltaje", cls: "warn" };
+    return { text: `Cambio de estado a ${to || "—"}`, cls: "muted" };
+  }
 
   function renderEvents(rows) {
     const host = $("events");
@@ -505,16 +593,15 @@
     }
 
     rows.forEach((e) => {
+      const d = describeTransition(e.from_status, e.to_status);
       const row = document.createElement("div");
-      row.className = "event";
-      const chip = document.createElement("span");
-      chip.className = "chip";
-      chip.style.background = classColor(e.to_class || "ok");
-      const stateText = document.createElement("strong");
-      stateText.textContent = e.to_status || "—";
-      const time = document.createElement("time");
-      time.textContent = fmtFull(e.ts);
-      row.append(chip, stateText, time);
+      row.className = `event ${d.cls}`;
+      row.innerHTML = `${icon(d.cls === "ok" ? "check" : d.cls === "muted" ? "clock" : "alert")}
+        <div class="event-body">
+          <strong>${d.text}</strong>
+          <span class="event-sub">${e.from_label || e.from_status || "—"} &rarr; ${e.to_label || e.to_status || "—"}</span>
+        </div>
+        <time>${fmtFull(e.ts)}</time>`;
       host.appendChild(row);
     });
   }
@@ -526,6 +613,69 @@
     } catch (_) {
       renderEvents([]);
     }
+  }
+
+  function fmtDuration(seconds) {
+    if (seconds == null) return "—";
+    const s = Math.max(0, Math.round(seconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h) return `${h} h ${m} min`;
+    if (m) return `${m} min ${sec} s`;
+    return `${sec} s`;
+  }
+
+  function renderPowerEvents(rows, power) {
+    const host = $("powerEvents");
+    if (!host) return;
+    host.textContent = "";
+    if (!rows || !rows.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty";
+      empty.textContent = "Sin cortes registrados en este periodo.";
+      host.appendChild(empty);
+      return;
+    }
+    rows.forEach((ev) => {
+      const batt = ev.battery_start != null || ev.battery_end != null
+        ? `Batería ${ev.battery_start != null ? Math.round(ev.battery_start) + "%" : "—"} &rarr; ${ev.battery_end != null ? Math.round(ev.battery_end) + "%" : "—"}`
+        : "Batería: —";
+      const load = ev.load_avg_pct != null ? `${Math.round((ev.load_avg_pct * power) / 100)} W promedio` : "";
+      const card = document.createElement("div");
+      card.className = `power-event${ev.ongoing ? " ongoing" : ""}`;
+      card.innerHTML = `${icon(ev.ongoing ? "alert" : "power")}
+        <div class="event-body">
+          <strong>${ev.ongoing ? "Corte en curso" : "Corte de energía"}</strong>
+          <span class="event-sub">${fmtFull(ev.started_at)}${ev.ongoing ? "" : ` · ${fmtDuration(ev.duration_s)}`}</span>
+          <span class="event-sub">${batt}${load ? ` · ${load}` : ""}</span>
+        </div>`;
+      host.appendChild(card);
+    });
+  }
+
+  async function loadPowerEvents() {
+    try {
+      const res = await fetch(`/api/power-events?range=${state.range}`).then((r) => r.json());
+      renderPowerEvents(res.events, state.nominalPower);
+    } catch (_) {
+      renderPowerEvents([], state.nominalPower);
+    }
+  }
+
+  function renderConsumptionStats(series) {
+    const host = $("consumptionStats");
+    if (!host) return;
+    const values = (series || []).filter((v) => typeof v === "number" && isFinite(v));
+    if (!values.length) {
+      host.innerHTML = "";
+      return;
+    }
+    const current = values[values.length - 1];
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    const peak = Math.max(...values);
+    const chip = (label, value) => `<div class="cons-chip"><span>${label}</span><strong>${Math.round(value)} W</strong></div>`;
+    host.innerHTML = chip("Actual", current) + chip("Media", avg) + chip("Pico", peak);
   }
 
   function renderRanges() {
@@ -541,12 +691,25 @@
         [...host.children].forEach((c) => c.classList.toggle("active", c.textContent === r));
         loadHistory();
         loadEvents();
+        loadPowerEvents();
       });
       host.appendChild(b);
     });
   }
 
+  function setMenu(open) {
+    document.body.classList.toggle("menu-open", open);
+    const btn = $("menuBtn");
+    const scrim = $("menuScrim");
+    if (btn) {
+      btn.setAttribute("aria-expanded", String(open));
+      btn.setAttribute("aria-label", open ? "Cerrar menú" : "Abrir menú");
+    }
+    if (scrim) scrim.hidden = !open;
+  }
+
   function showView(view) {
+    setMenu(false);
     state.view = view;
     document.querySelectorAll("main [data-view]").forEach((el) => {
       el.classList.toggle("hidden", el.dataset.view !== view);
@@ -558,6 +721,7 @@
       loadHistory().then(() => Object.values(state.charts).forEach((c) => c && c.resize()));
     } else if (view === "events") {
       loadEvents();
+      loadPowerEvents();
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -570,7 +734,11 @@
     } catch (_) {
       return;
     }
-    ws.onopen = () => { state.wsConnected = true; $("nutState").textContent = "En marcha"; };
+    ws.onopen = () => {
+      state.wsConnected = true;
+      state.reconnectStep = 0;
+      $("nutState").textContent = "En marcha";
+    };
     ws.onmessage = (ev) => {
       try {
         const s = JSON.parse(ev.data);
@@ -581,7 +749,10 @@
     ws.onclose = () => {
       state.wsConnected = false;
       $("nutState").textContent = "Desconectado";
-      setTimeout(connect, 5000);
+      const delays = [2000, 5000, 10000, 30000];
+      const delay = delays[Math.min(state.reconnectStep, delays.length - 1)];
+      state.reconnectStep += 1;
+      setTimeout(connect, delay);
     };
     ws.onerror = () => ws.close();
   }
@@ -626,8 +797,12 @@
     document.querySelectorAll(".nav-link").forEach((b) => {
       b.addEventListener("click", () => showView(b.dataset.view));
     });
+    const menuBtn = $("menuBtn");
+    if (menuBtn) menuBtn.addEventListener("click", () => setMenu(!document.body.classList.contains("menu-open")));
+    const menuScrim = $("menuScrim");
+    if (menuScrim) menuScrim.addEventListener("click", () => setMenu(false));
     showView("dashboard");
-    await Promise.all([refreshSummary(), loadHistory(), loadEvents()]);
+    await Promise.all([refreshSummary(), loadHistory(), loadEvents(), loadPowerEvents()]);
     connect();
     setInterval(() => { if (!state.wsConnected) refreshSummary(); }, 30000);
     setInterval(() => { loadHistory(); loadEvents(); }, 300000);
@@ -635,5 +810,6 @@
   }
 
   $("themeBtn").addEventListener("click", () => applyTheme(state.theme === "dark" ? "light" : "dark"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
   document.addEventListener("DOMContentLoaded", init);
 })();

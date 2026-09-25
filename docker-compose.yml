@@ -91,6 +91,8 @@ services:
     build:
       context: ./ups
       dockerfile: Dockerfile
+    # host network: uvicorn bindea 127.0.0.1:8484 y alcanza portal-api (127.0.0.1:8088).
+    network_mode: host
     environment:
       UPS_HOST: "192.168.0.224"
       UPS_NAME: "apc"
@@ -98,10 +100,9 @@ services:
       DB_PATH: "/data/ups.db"
       SIMULATE: "0"
       HTTP_FALLBACK: "1"
+      PORTAL_STATUS_URL: "http://127.0.0.1:8088/api/status"
     volumes:
       - ./ups/data:/data
-    ports:
-      - "127.0.0.1:8484:8484"
     healthcheck:
       test:
         - "CMD"

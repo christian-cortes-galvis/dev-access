@@ -5,6 +5,7 @@ latest summary to WebSocket subscribers (served by main.py).
 """
 
 import asyncio
+import json
 import math
 import os
 import re
@@ -23,6 +24,12 @@ UPS_CGI_URL = os.environ.get(
     "UPS_CGI_URL",
     f"http://{UPS_HOST}/cgi-bin/nut/upsstats.cgi?host={UPS_NAME}@localhost&treemode",
 )
+PORTAL_STATUS_URL = os.environ.get("PORTAL_STATUS_URL", "http://127.0.0.1:8088/api/status")
+PORTAL_TIMEOUT = int(os.environ.get("PORTAL_TIMEOUT", "5"))
+SERVICES_POLL = int(os.environ.get("SERVICES_POLL", "30"))
+
+# Estado de servicios externos -> slug del catalogo de portal-api.
+SERVICE_MAP = {"pve": "proxmox", "pbs": "backups", "storage": "copias"}
 
 # NUT variable -> stored column
 WATCH = {
@@ -51,9 +58,10 @@ STATUS_LABELS = {
     "FSD": "Apagado forzado",
 }
 
-_state = {"summary": None, "error": None, "error_ts": None, "source": None}
+_state = {"summary": None, "error": None, "error_ts": None, "source": None, "services": None}
 _subscribers = set()
 _last_status = None
+_services_ts = 0.0
 
 
 def _num(value):
@@ -122,6 +130,35 @@ def _run_http():
     if not data:
         raise RuntimeError("respuesta CGI vacia")
     return data
+
+
+def _portal_services():
+    """Estado de PVE/PBS/storage leido de portal-api (best-effort)."""
+    fallback = {key: {"state": "unknown"} for key in SERVICE_MAP}
+    try:
+        with urllib.request.urlopen(PORTAL_STATUS_URL, timeout=PORTAL_TIMEOUT) as resp:
+            payload = json.load(resp)
+    except Exception:  # noqa: BLE001 - nunca romper el summary por portal-api
+        return fallback
+    statuses = payload.get("statuses") or {}
+    out = {}
+    for key, slug in SERVICE_MAP.items():
+        info = statuses.get(slug) or {}
+        out[key] = {
+            "state": info.get("state", "unknown"),
+            "code": info.get("code"),
+            "latency_ms": info.get("latency_ms"),
+        }
+    return out
+
+
+async def _refresh_services(force=False):
+    global _services_ts
+    now = time.time()
+    if not force and (now - _services_ts) < SERVICES_POLL:
+        return
+    _services_ts = now
+    _state["services"] = await asyncio.to_thread(_portal_services)
 
 
 async def _read_ups():
@@ -207,6 +244,11 @@ def _build_summary(ts, raw, values):
         "input_voltage_nominal": _num(raw.get("input.voltage.nominal")),
         "beeper": raw.get("ups.beeper.status"),
         "test_result": raw.get("ups.test.result"),
+        "driver_name": raw.get("driver.name"),
+        "driver_version": raw.get("driver.version"),
+        "usb_vendorid": raw.get("ups.vendorid"),
+        "usb_productid": raw.get("ups.productid"),
+        "services": _state.get("services") or {},
     }
 
 
@@ -269,12 +311,14 @@ async def collect_once():
 
 
 async def run():
-    global _last_status
+    global _last_status, _services_ts
     db.init_db()
     _last_status = db.last_status()
+    await _refresh_services(force=True)
     cycle = 0
     while True:
         await collect_once()
+        await _refresh_services()
         cycle += 1
         if cycle % 20 == 0:
             try:

@@ -12,7 +12,7 @@
 </head>
 <body data-status="ok">
 <div class="app">
-  <header class="top">
+  <header class="top" id="top">
     <div class="brand">
       <img class="logo" alt="" src="/favicon.png">
       <div class="brand-text">
@@ -32,6 +32,7 @@
     <div class="actions">
       <span class="status-pill" id="statusBadge" data-class="ok" aria-live="polite">
         <span class="pulse" id="statusDot"></span>
+        <span class="status-ico" id="statusIcon" aria-hidden="true"></span>
         <span id="statusText">—</span>
       </span>
       <button id="themeBtn" class="icon-btn" type="button" aria-label="Cambiar tema" title="Cambiar tema">
@@ -40,6 +41,12 @@
       </button>
     </div>
   </header>
+
+  <button id="menuBtn" class="menu-fab" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="top">
+    <svg class="i-menu" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    <svg class="i-close" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg>
+  </button>
+  <div id="menuScrim" class="menu-scrim" hidden></div>
 
   <div class="topline">
     <div class="service-strip" aria-label="Servicios del sistema">
@@ -76,21 +83,6 @@
         <div class="hero-stat">
           <span class="hero-value" id="runtime">--:--:--</span>
           <span class="hint" id="runtimeSub">Basado en consumo actual.</span>
-        </div>
-
-        <div class="hero-meta">
-          <div class="meta-item">
-            <span class="label">Estado</span>
-            <span class="meta-value" id="heroStatus">—</span>
-          </div>
-          <div class="meta-item">
-            <span class="label">Voltaje entrada</span>
-            <span class="meta-value" id="inputVoltage">—</span>
-          </div>
-          <div class="meta-item">
-            <span class="label">Carga</span>
-            <span class="meta-value" id="loadValue">—</span>
-          </div>
         </div>
       </div>
     </section>
@@ -144,6 +136,8 @@
         <div class="ranges" id="ranges" role="group" aria-label="Rango de tiempo"></div>
       </div>
 
+      <div class="cons-stats" id="consumptionStats"></div>
+
       <div class="charts-grid primary-grid">
         <figure class="chart-box primary"><figcaption>Consumo</figcaption><canvas id="chartLoad"></canvas></figure>
       </div>
@@ -156,7 +150,9 @@
     </section>
 
     <section class="card events" data-view="events">
-      <div class="card-head compact"><h2>Actividad reciente</h2></div>
+      <div class="card-head compact"><h2>Cortes de energía</h2></div>
+      <div id="powerEvents" class="events-list"></div>
+      <div class="card-head compact section-gap"><h2>Actividad reciente</h2></div>
       <div id="events" class="events-list"></div>
     </section>
 
@@ -171,6 +167,7 @@
     <a href="/cgi-bin/nut/upsstats.cgi" target="_blank" rel="noopener">NUT clásico</a>
   </footer>
 </div>
+<div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/app.js"></script>
 </body>
