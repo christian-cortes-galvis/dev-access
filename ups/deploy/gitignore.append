@@ -1,0 +1,3 @@
+# Anadir a ~/cortexdev-access/.gitignore
+ups/data/
+ups/__pycache__/

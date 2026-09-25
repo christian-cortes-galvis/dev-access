@@ -25,3 +25,5 @@ backupcsr/keys/
 backupcsr/web/conf/*.env
 backupcsr/web/venv/
 
+ups/data/
+ups/__pycache__/
