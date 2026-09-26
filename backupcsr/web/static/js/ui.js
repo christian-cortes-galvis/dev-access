@@ -36,6 +36,8 @@ const STATUS_META = {
   EN_CURSO: { pill: 'info', label: 'EN CURSO' },
   TARDE: { pill: 'warn', label: 'TARDE' },
   FALLO: { pill: 'err', label: 'FALLÓ' },
+  PARCIAL: { pill: 'warn', label: 'PARCIAL' },
+  OMITIDO: { pill: 'warn', label: 'OMITIDO' },
   NUNCA: { pill: 'unknown', label: 'NUNCA' },
   DESHABILITADA: { pill: 'unknown', label: 'DESHABILITADA' },
   INCIERTO: { pill: 'unknown', label: 'INCIERTO' },

@@ -174,6 +174,25 @@ El **cron instalado** (`/etc/cron.d/backupcsr`) es la fuente de verdad del **est
   cd /opt/backupcsr/web && venv/bin/python -m app.cli adopt-cron             # aplicar
   ```
 
+## Alertas e incidentes
+
+Cada corrida se clasifica (`app/logs.py`) a partir del contrato de líneas del job
+(`OMITIDO:`, `AVISO: N archivos con error`, `ERROR: ... [transitorio]`, `PROCESO: exit=N`) en
+`fatal`, `transitorio`, `contencion` o `parcial`, y se guarda en `runs.error_class` /
+`runs.error_lines` (+ `exit_code` y `triggered_by`). La tabla `incidents` mantiene **un
+incidente abierto por job** (se abre en no-OK, se actualiza con `count`/`consecutive` y se
+resuelve al volver `OK`); `contencion` no abre incidente.
+
+`build_alerts` (campana) aplica severidad y debounce: `fatal` → Crítico; `transitorio` →
+Aviso solo con 2 corridas no-OK consecutivas; `contencion`/`parcial` → Aviso. La
+`criticality` del job sube severidad, no la baja. Estados `OMITIDO`/`PARCIAL` no alteran la
+frescura (se evalúa con la última corrida real).
+
+Aviso externo opcional (`app/notify.py`, `BACKUP_ALERT_*` en `web.env`): `fatal` inmediato,
+resumen diario (`venv/bin/python -m app.cli notify-digest`) y recuperación; sin
+`BACKUP_ALERT_MAIL_TO` es no-op. Retención: `venv/bin/python -m app.cli prune`
+(`runs` 180 d, incidentes resueltos 365 d).
+
 ## API
 
 Todo bajo `/api/`, con sesión salvo `/api/health` y `/api/auth/login`.
@@ -186,6 +205,7 @@ Todo bajo `/api/`, con sesión salvo `/api/health` y `/api/auth/login`.
   `GET /api/jobs/{slug}/script` (script real en solo lectura + `drift`)
 - `GET /api/runs`, `GET /api/runs/{id}`, `GET /api/runs/{id}/log`,
   `GET /api/runs/export?format=csv|json` (filtros `job`, `status`, `desde`, `hasta`)
+- `GET /api/incidents` (incidentes abiertos + últimos resueltos)
 - `GET /api/files`, `GET /api/jobs/{slug}/files`, `GET /api/cron`
 - `GET /api/jobs/{slug}/files/entry?path=` (datos para confirmar), `GET /api/jobs/{slug}/files/download?path=`
 - `POST /api/jobs/{slug}/files/mkdir|rename|move|delete` (admin)

@@ -2,7 +2,8 @@
 # Instalar con: install -m 0644 cron/backupcsr.cron /etc/cron.d/backupcsr
 #
 # Horarios (hora local Colombia, UTC-5): los jobs *-bd corren cada hora (6-19) y
-# los *-web 3 veces al día (6, 13 y 19).
+# los *-web 4 veces al día (3, 10, 16 y 20), fuera de la ráfaga horaria, para reducir
+# la contención de la cola global (los que no consiguen turno quedan OMITIDOS, no FALLIDOS).
 # OJO: el cron de Ubuntu/Debian NO implementa CRON_TZ (la cadena no está en /usr/sbin/cron);
 # la línea CRON_TZ de abajo solo exporta la variable a los jobs. El anfitrión DEBE estar en
 # America/Bogota (timedatectl set-timezone America/Bogota) o los horarios se evalúan en la
@@ -21,10 +22,10 @@ MAILTO=""
 # --- Google y Latino: SFTP con llave -> NAS ---
 2 6-19 * * *        root  flock -n /run/lock/backupcsr-google-bd.lock   /opt/backupcsr/jobs/google-bd.sh
 14 6-19 * * *       root  flock -n /run/lock/backupcsr-latino-bd.lock   /opt/backupcsr/jobs/latino-bd.sh
-8 6,13,19 * * *     root  flock -n /run/lock/backupcsr-latino-web.lock  /opt/backupcsr/jobs/latino-web.sh
+8 3,10,16,20 * * *   root  flock -n /run/lock/backupcsr-latino-web.lock  /opt/backupcsr/jobs/latino-web.sh
 
 # --- NAS local (Ruta56, Gastro, Enter): FTP -> NAS ---
 26 6-19 * * *        root  flock -n /run/lock/backupcsr-ruta56-bd.lock   /opt/backupcsr/jobs/ruta56-bd.sh
-20 6,13,19 * * *     root  flock -n /run/lock/backupcsr-ruta56-web.lock  /opt/backupcsr/jobs/ruta56-web.sh
+20 3,10,16,20 * * *  root  flock -n /run/lock/backupcsr-ruta56-web.lock  /opt/backupcsr/jobs/ruta56-web.sh
 38 6-19 * * *       root  flock -n /run/lock/backupcsr-gastro-bd.lock   /opt/backupcsr/jobs/gastro-bd.sh
 50 6-19 * * *       root  flock -n /run/lock/backupcsr-enter-bd.lock    /opt/backupcsr/jobs/enter-bd.sh

@@ -8,6 +8,8 @@ Uso (dentro del venv, en /opt/backupcsr/web):
   venv/bin/python -m app.cli adopt-cron [--dry-run]
   venv/bin/python -m app.cli snapshot-sizes
   venv/bin/python -m app.cli resync-runs [--dry-run]
+  venv/bin/python -m app.cli notify-digest [--force]
+  venv/bin/python -m app.cli prune [--runs-days N] [--incidents-days N] [--dry-run]
   venv/bin/python -m app.cli status
 """
 from __future__ import annotations
@@ -16,8 +18,9 @@ import argparse
 import getpass
 import json
 import sys
+from datetime import timedelta
 
-from . import auth, catalog, config, cronfile, db, sizes
+from . import auth, catalog, config, cronfile, db, logs, notify, sizes
 
 
 def cmd_create_admin(args: argparse.Namespace) -> int:
@@ -228,6 +231,59 @@ def cmd_resync_runs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_notify_digest(args: argparse.Namespace) -> int:
+    """Envía el resumen diario de incidentes por correo (cron)."""
+    if not db.available():
+        print(f"ERROR: MySQL no disponible ({db.last_error()})", file=sys.stderr)
+        return 2
+    if not notify.enabled():
+        print("aviso externo desactivado (BACKUP_ALERT_MAIL_TO vacío)")
+        return 0
+    result = notify.send_digest(force=args.force)
+    if result == 1:
+        print("resumen diario enviado")
+        return 0
+    if result == 0:
+        print("resumen no enviado (ya se envió hoy; usa --force para reenviar)")
+        return 0
+    print("ERROR: falló el envío del resumen", file=sys.stderr)
+    return 1
+
+
+def cmd_prune(args: argparse.Namespace) -> int:
+    """Borra corridas e incidentes antiguos (retención)."""
+    if not db.available():
+        print(f"ERROR: MySQL no disponible ({db.last_error()})", file=sys.stderr)
+        return 2
+    runs_cut = logs.to_naive(logs.now() - timedelta(days=max(1, args.runs_days)))
+    inc_cut = logs.to_naive(logs.now() - timedelta(days=max(1, args.incidents_days)))
+    if args.dry_run:
+        runs = db.query(
+            "SELECT COUNT(*) AS n FROM runs WHERE started_at < %s", (runs_cut,), one=True
+        )
+        incidents = db.query(
+            "SELECT COUNT(*) AS n FROM incidents "
+            "WHERE resolved_at IS NOT NULL AND resolved_at < %s",
+            (inc_cut,),
+            one=True,
+        )
+        print(
+            f"DRY-RUN: se borrarían {int(runs['n'])} corridas (< {args.runs_days}d) y "
+            f"{int(incidents['n'])} incidentes resueltos (< {args.incidents_days}d)"
+        )
+        return 0
+    deleted_runs = db.execute("DELETE FROM runs WHERE started_at < %s", (runs_cut,))
+    deleted_incidents = db.execute(
+        "DELETE FROM incidents WHERE resolved_at IS NOT NULL AND resolved_at < %s",
+        (inc_cut,),
+    )
+    print(
+        f"retención aplicada: {deleted_runs} corridas borradas (< {args.runs_days}d), "
+        f"{deleted_incidents} incidentes resueltos (< {args.incidents_days}d)"
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Utilidades de backupcsr-web")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -257,6 +313,18 @@ def build_parser() -> argparse.ArgumentParser:
     resync = sub.add_parser("resync-runs", help="re-deriva las corridas desde los logs")
     resync.add_argument("--dry-run", action="store_true", help="solo muestra lo que haría")
     resync.set_defaults(func=cmd_resync_runs)
+
+    digest = sub.add_parser("notify-digest", help="envía el resumen diario de incidentes")
+    digest.add_argument("--force", action="store_true", help="reenvía aunque ya se envió hoy")
+    digest.set_defaults(func=cmd_notify_digest)
+
+    prune = sub.add_parser("prune", help="borra corridas e incidentes antiguos (retención)")
+    prune.add_argument("--runs-days", type=int, default=180, help="días de corridas a conservar")
+    prune.add_argument(
+        "--incidents-days", type=int, default=365, help="días de incidentes resueltos a conservar"
+    )
+    prune.add_argument("--dry-run", action="store_true", help="solo muestra lo que haría")
+    prune.set_defaults(func=cmd_prune)
     return parser
 
 

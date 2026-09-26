@@ -1,6 +1,6 @@
 /var/log/backupcsr/*.log {
 	weekly
-	rotate 8
+	rotate 16
 	compress
 	delaycompress
 	missingok

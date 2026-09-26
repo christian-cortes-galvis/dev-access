@@ -57,7 +57,9 @@ function renderKpis(summary) {
   row.appendChild(kpi('Jobs OK', String(counts.OK || 0), 'de ' + (counts.total || 0) + ' · ' +
     (counts.habilitados || 0) + ' habilitadas', 'okv'));
   row.appendChild(kpi('Fallos / sin datos', String(bad),
-    (counts.EN_CURSO || 0) + ' en curso · ' + (counts.TARDE || 0) + ' tarde', bad ? 'err' : ''));
+    (counts.EN_CURSO || 0) + ' en curso · ' + (counts.TARDE || 0) + ' tarde · ' +
+    (counts.PARCIAL || 0) + ' parcial · ' + (counts.OMITIDO || 0) + ' omitido',
+    bad ? 'err' : ''));
   row.appendChild(kpi('Duración media', summary.avg_duration_s ? fmtDuration(summary.avg_duration_s) : '—',
     'última ejecución'));
   row.appendChild(kpi('NAS libre', nas ? fmtGb(nas.free) : '—',

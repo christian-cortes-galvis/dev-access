@@ -80,6 +80,18 @@ FILES_MAX_UPLOAD_MB = _int("BACKUP_FILES_MAX_UPLOAD_MB", 512)
 # A partir de este tamaño el portal pide escribir el nombre para confirmar el borrado.
 FILES_CONFIRM_MB = _int("BACKUP_FILES_CONFIRM_MB", 100)
 
+# --- Alertas por correo (opcionales) ---
+# Sin BACKUP_ALERT_MAIL_TO el aviso externo queda desactivado (el portal sigue
+# mostrando la campana con las alertas). fatal -> correo inmediato; el resto va en
+# el resumen diario (app.cli notify-digest). Con SMTP vacío se usa /usr/sbin/sendmail.
+ALERT_MAIL_TO = os.environ.get("BACKUP_ALERT_MAIL_TO", "").strip()
+ALERT_MAIL_FROM = os.environ.get("BACKUP_ALERT_MAIL_FROM", "backupcsr@localhost").strip()
+ALERT_SMTP_HOST = os.environ.get("BACKUP_ALERT_SMTP_HOST", "").strip()
+ALERT_SMTP_PORT = _int("BACKUP_ALERT_SMTP_PORT", 25)
+ALERT_SMTP_USER = os.environ.get("BACKUP_ALERT_SMTP_USER", "").strip()
+ALERT_SMTP_PASS = os.environ.get("BACKUP_ALERT_SMTP_PASS", "")
+ALERT_SMTP_TLS = _flag("BACKUP_ALERT_SMTP_TLS", "0")
+
 # --- Admin inicial ---
 ADMIN_USER = os.environ.get("BACKUP_ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("BACKUP_ADMIN_PASSWORD", "")

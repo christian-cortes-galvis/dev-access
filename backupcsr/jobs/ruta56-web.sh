@@ -3,6 +3,8 @@
 # Reemplaza scripts/servidor_ruta56_web.bat + texts/script_ruta56_web.txt
 # WinSCP: cd ruta56 ; synchronize local ... ruta56/storage storage/app
 set -euo pipefail
+# Corre 3-4 veces al día: espera más por el turno de la cola que los *-bd (hourly).
+GATE_WAIT="${GATE_WAIT:-1800}"
 . "${BACKUPCSR_LIB:-/opt/backupcsr/lib/common.sh}"
 
 job_init "ruta56-web"

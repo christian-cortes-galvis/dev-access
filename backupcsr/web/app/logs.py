@@ -7,6 +7,7 @@ ejecución que le corresponde según el horario, interpretado en America/Bogota.
 from __future__ import annotations
 
 import gzip
+import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -37,6 +38,37 @@ def host_tz():
 TRANSFER_RE = re.compile(r"^Transferring file `(.+)'$")
 REMOVE_RE = re.compile(r"^Removing old file `(.+)'$")
 ERROR_HINT_RE = re.compile(r"fatal|error|failed|refused|denied|no such|timeout|retries", re.I)
+# Contrato de líneas que emiten los jobs (lib/common.sh) para clasificar sin adivinar
+# sobre la salida cruda de lftp.
+TRIGGER_RE = re.compile(r"trigger=(\w+)")
+EXIT_RE = re.compile(r"exit=(\d+)")
+PARTIAL_RE = re.compile(r"^AVISO:\s*(\d+)\s+archivos?\s+con\s+error", re.I)
+TRANSIENT_RE = re.compile(
+    r"max-retries|timed out|timeout|connection refused|connection reset|broken pipe|"
+    r"temporarily unavailable|reconnect|connection closed",
+    re.I,
+)
+
+ESTADOS = ("OK", "FALLO", "EN_CURSO", "INCIERTO", "OMITIDO", "PARCIAL")
+
+
+def classify_error(text: str | None) -> str:
+    """Clase de un error de job: marcador explícito o heurística de red."""
+    value = text or ""
+    if "[transitorio]" in value or TRANSIENT_RE.search(value):
+        return "transitorio"
+    return "fatal"
+
+
+def parse_error_lines(raw) -> list[str]:
+    """Normaliza `runs.error_lines`/`incidents` (JSON TEXT) a una lista de líneas."""
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return [str(raw)]
+    return value if isinstance(value, list) else [str(value)]
 
 
 def now() -> datetime:
@@ -92,6 +124,19 @@ def parse_slug(slug: str) -> list[dict]:
     runs: list[dict] = []
     current: dict | None = None
 
+    def note(message: str) -> None:
+        """Guarda hasta 5 líneas de error (sin repetir la anterior)."""
+        if current is None:
+            return
+        text = message.strip()[:1000]
+        if not text:
+            return
+        lines = current["error_lines"]
+        if lines and lines[-1] == text:
+            return
+        if len(lines) < 5:
+            lines.append(text)
+
     def close(status: str | None = None) -> None:
         nonlocal current
         if current is None:
@@ -107,7 +152,13 @@ def parse_slug(slug: str) -> list[dict]:
             timestamp, _job, message = match.groups()
             started = parse_log_time(timestamp)
             if message.startswith("=== inicio "):
-                close("INCIERTO")
+                # Cierra la corrida anterior: INCIERTO solo si quedó abierta y sin cierre.
+                opened = (
+                    current is not None
+                    and current["status"] == "EN_CURSO"
+                    and not current["_finished"]
+                )
+                close("INCIERTO" if opened else None)
                 current = {
                     "started_at": started,
                     "finished_at": None,
@@ -116,21 +167,58 @@ def parse_slug(slug: str) -> list[dict]:
                     "files_transferred": 0,
                     "files_removed": 0,
                     "error_text": None,
+                    "error_class": None,
+                    "error_lines": [],
+                    "exit_code": None,
+                    "triggered_by": "cron",
+                    "partial_files": 0,
                     "truncated": False,
                     "log_path": str(path),
                     "_files": [],
                     "_finished": False,
+                    "_error_marker": False,
                 }
+                trigger = TRIGGER_RE.search(message)
+                if trigger:
+                    current["triggered_by"] = trigger.group(1)
             elif current is None:
                 continue
             elif message.startswith("=== fin "):
                 current["finished_at"] = started
                 current["_finished"] = True
-                close("OK")
-            elif message.startswith("FALLO:") or message.startswith("ERROR:"):
-                current["status"] = "FALLO"
+                close("PARCIAL" if current["error_class"] == "parcial" else "OK")
+            elif message.startswith("OMITIDO:"):
+                current["status"] = "OMITIDO"
+                if not current["error_class"]:
+                    current["error_class"] = "contencion"
                 if not current["error_text"]:
                     current["error_text"] = message[:1000]
+                note(message)
+            elif message.startswith("AVISO:"):
+                partial = PARTIAL_RE.match(message)
+                if partial and current["status"] != "FALLO":
+                    current["error_class"] = "parcial"
+                    current["partial_files"] = int(partial.group(1))
+                    if not current["error_text"]:
+                        current["error_text"] = message[:1000]
+                note(message)
+            elif message.startswith("FALLO:") or message.startswith("ERROR:"):
+                current["status"] = "FALLO"
+                if not current["error_class"] or current["error_class"] == "parcial":
+                    current["error_class"] = classify_error(message)
+                # El resumen del script (ERROR:) manda sobre cualquier línea cruda de
+                # lftp; se conserva el primero para no pisarlo con el trap FALLO.
+                if not current["_error_marker"]:
+                    current["error_text"] = message[:1000]
+                    current["_error_marker"] = True
+                code = EXIT_RE.search(message)
+                if code and current["exit_code"] is None:
+                    current["exit_code"] = int(code.group(1))
+                note(message)
+            elif message.startswith("PROCESO:"):
+                code = EXIT_RE.search(message)
+                if code:
+                    current["exit_code"] = int(code.group(1))
             continue
 
         if current is None:
@@ -151,11 +239,30 @@ def parse_slug(slug: str) -> list[dict]:
             else:
                 current["truncated"] = True
             continue
-        if not current["error_text"] and ERROR_HINT_RE.search(line):
-            current["error_text"] = line.strip()[:1000]
+        if ERROR_HINT_RE.search(line):
+            if not current["error_text"]:
+                current["error_text"] = line.strip()[:1000]
+            if not current["error_class"]:
+                current["error_class"] = classify_error(line)
+            note(line)
 
     close(None)
     return runs
+
+
+def effective_run(runs: list[dict]) -> dict | None:
+    """Última corrida que no sea OMITIDO (para juzgar la frescura del job)."""
+    for run in reversed(runs):
+        if run.get("status") != "OMITIDO":
+            return run
+    return None
+
+
+def latest_omit(runs: list[dict]) -> dict | None:
+    """La corrida más reciente si quedó OMITIDA (no consiguió turno de cola)."""
+    if runs and runs[-1].get("status") == "OMITIDO":
+        return runs[-1]
+    return None
 
 
 def latest_run(slug: str) -> dict | None:
@@ -255,7 +362,12 @@ def evaluate(run: dict | None, schedule: dict, reference: datetime, running: boo
     if isinstance(finished, datetime):
         finished = from_naive(finished)
 
-    if run.get("_finished") and run.get("status") == "OK":
+    if run.get("status") == "OMITIDO":
+        return "OMITIDO", run.get("error_text") or "ronda omitida por turno de cola"
+
+    if run.get("_finished") and run.get("status") in ("OK", "PARCIAL"):
+        if run.get("status") == "PARCIAL":
+            return "PARCIAL", run.get("error_text") or "cierre con archivos con error"
         expected = last_expected(schedule, reference)
         if expected is None:
             return "OK", "cierre correcto; horario no verificable"
@@ -286,6 +398,11 @@ def run_to_dict(run: dict) -> dict:
         "files_transferred": run.get("files_transferred", 0),
         "files_removed": run.get("files_removed", 0),
         "error_text": run.get("error_text"),
+        "error_class": run.get("error_class"),
+        "error_lines": run.get("error_lines") or [],
+        "exit_code": run.get("exit_code"),
+        "triggered_by": run.get("triggered_by") or "cron",
+        "partial_files": int(run.get("partial_files") or 0),
         "truncated": bool(run.get("truncated")),
         "log_path": run.get("log_path"),
         "duration_s": _duration(run),
@@ -306,11 +423,27 @@ def _duration(run: dict) -> int | None:
 
 def _db_status(run: dict) -> str:
     status = run.get("status")
-    return status if status in ("OK", "FALLO", "EN_CURSO", "INCIERTO") else "INCIERTO"
+    return status if status in ESTADOS else "INCIERTO"
+
+
+def _error_lines_json(run: dict) -> str | None:
+    lines = run.get("error_lines") or []
+    if not lines:
+        return None
+    return json.dumps(lines[:5], ensure_ascii=False)
+
+
+def _triggered_by(run: dict) -> str:
+    value = run.get("triggered_by") or "cron"
+    return value if value in ("cron", "manual") else "cron"
 
 
 def store_runs(job: dict, runs: list[dict]) -> None:
-    """Persiste corridas nuevas/abiertas en MySQL (idempotente por started_at)."""
+    """Persiste corridas nuevas/abiertas en MySQL (idempotente por started_at).
+
+    También abre/actualiza/resuelve el incidente abierto del job a partir de la
+    última corrida *terminada* (no cuenta las que están EN_CURSO).
+    """
     if not db.available():
         return
     job_id = job.get("id")
@@ -330,9 +463,13 @@ def store_runs(job: dict, runs: list[dict]) -> None:
             finished,
             _db_status(run),
             int(run["dry_run"]),
+            run.get("exit_code"),
             int(run["files_transferred"]),
             int(run["files_removed"]),
             run.get("error_text"),
+            run.get("error_class") or "",
+            _error_lines_json(run),
+            _triggered_by(run),
             1 if run.get("truncated") else 0,
             str(run.get("log_path") or ""),
         )
@@ -340,9 +477,10 @@ def store_runs(job: dict, runs: list[dict]) -> None:
             run_id = db.insert(
                 """
                 INSERT INTO runs (
-                    job_id, started_at, finished_at, status, dry_run,
-                    files_transferred, files_removed, error_text, truncated, log_path
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    job_id, started_at, finished_at, status, dry_run, exit_code,
+                    files_transferred, files_removed, error_text, error_class,
+                    error_lines, triggered_by, truncated, log_path
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (job_id, started, *common),
             )
@@ -356,13 +494,72 @@ def store_runs(job: dict, runs: list[dict]) -> None:
         else:
             db.execute(
                 """
-                UPDATE runs SET finished_at=%s, status=%s, dry_run=%s,
-                    files_transferred=%s, files_removed=%s, error_text=%s,
-                    truncated=%s, log_path=%s
+                UPDATE runs SET finished_at=%s, status=%s, dry_run=%s, exit_code=%s,
+                    files_transferred=%s, files_removed=%s, error_text=%s, error_class=%s,
+                    error_lines=%s, triggered_by=%s, truncated=%s, log_path=%s
                 WHERE job_id=%s AND started_at=%s
                 """,
                 (*common, job_id, started),
             )
+    if runs:
+        _sync_incident(job_id, runs)
+
+
+def _sync_incident(job_id: int, runs: list[dict]) -> None:
+    """Un incidente abierto por job: abrir/actualizar en no-OK, resolver en OK.
+
+    `contencion` (OMITIDO) no abre incidente: es una ronda omitida, no un fallo.
+    Es idempotente por `last_run_started`, así el sondeo cada 30 s no infla el conteo.
+    """
+    last = None
+    for run in reversed(runs):
+        if run.get("status") in ("OK", "FALLO", "PARCIAL", "OMITIDO"):
+            last = run
+            break
+    if not last or not last.get("started_at"):
+        return
+    started = to_naive(last["started_at"])
+    status = last.get("status")
+    if status == "OMITIDO":
+        return
+    try:
+        open_row = db.query(
+            "SELECT id, last_run_started FROM incidents "
+            "WHERE job_id = %s AND resolved_at IS NULL ORDER BY id DESC LIMIT 1",
+            (job_id,),
+            one=True,
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("no se pudo leer incidents (job_id=%s)", job_id)
+        return
+    finished = to_naive(last.get("finished_at") or last["started_at"])
+    if status == "OK":
+        # Resolver es idempotente: al fijar resolved_at, la fila deja de cumplir
+        # `resolved_at IS NULL`, así que un OK en la MISMA corrida que antes se vio
+        # como FALLO (p. ej. reintento por contraseña) también cierra el incidente.
+        if open_row:
+            db.execute(
+                "UPDATE incidents SET resolved_at = %s, last_run_started = %s WHERE id = %s",
+                (finished, started, open_row["id"]),
+            )
+        return
+    error_class = last.get("error_class") or ("parcial" if status == "PARCIAL" else "fatal")
+    level = "danger" if error_class == "fatal" else "warning"
+    text = (last.get("error_text") or status)[:1024]
+    if open_row:
+        if open_row.get("last_run_started") == started:
+            return
+        db.execute(
+            "UPDATE incidents SET error_class=%s, `level`=%s, `text`=%s, last_seen=%s, "
+            "`count`=`count`+1, consecutive=consecutive+1, last_run_started=%s WHERE id=%s",
+            (error_class, level, text, finished, started, open_row["id"]),
+        )
+        return
+    db.execute(
+        "INSERT INTO incidents (job_id, error_class, `level`, `text`, first_seen, last_seen, "
+        "`count`, consecutive, last_run_started) VALUES (%s, %s, %s, %s, %s, %s, 1, 1, %s)",
+        (job_id, error_class, level, text, finished, finished, started),
+    )
 
 
 def tail_log(slug: str, lines: int = 200) -> str:

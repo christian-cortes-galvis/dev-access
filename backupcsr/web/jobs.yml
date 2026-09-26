@@ -14,7 +14,10 @@
 #
 # Los minutos van escalonados (2, 14, 20, 26, 38, 50) para que los seis jobs no
 # arranquen a la vez: seis mirrors simultáneos contra el NAS agotan la RAM del
-# anfitrión (4 vCPU, ~3,3 GB, swap lleno) y bloquean el resto de servicios. Con
+# anfitrión (4 vCPU, ~3,3 GB, swap lleno) y bloquean el resto de servicios. Los
+# *-web corren en horas fuera de la ráfaga horaria (3,10,16,20) para reducir la
+# contención de la cola global; si no consiguen turno, la ronda queda OMITIDA
+# (aviso, no fallo) y se reintenta en el siguiente ciclo. Con
 # BACKUP_MANAGE_CRON=1 hay que ajustar además el horario en la tabla `jobs` (panel
 # de Programación); la cola global de lib/common.sh protege en cualquier caso.
 settings:
@@ -72,19 +75,19 @@ jobs:
     lockfile: /run/lock/backupcsr-ruta56-web.lock
     cron:
       minute: "20"
-      hour: "6,13,19"
+      hour: "3,10,16,20"
     sort: 40
 
   - slug: latino-web
     name: Latino Web
-    description: "Archivos web de Chequeos/Latino (SFTP con la llave latino): EDUCACION y DARUMA (daruma302.socimedicostools.info) -> NAS."
+    description: "Archivos web de Chequeos/Latino (SFTP con la llave latino): educacion y daruma302.socimedicostools.info -> NAS."
     origin_type: sftp
-    source: /home/chequeos/EDUCACION + /home/chequeos/DARUMA
+    source: /home/chequeos/educacion + /home/chequeos/daruma302.socimedicostools.info
     dest_rel: latino-web
     lockfile: /run/lock/backupcsr-latino-web.lock
     cron:
       minute: "8"
-      hour: "6,13,19"
+      hour: "3,10,16,20"
     sort: 45
 
   - slug: gastro-bd

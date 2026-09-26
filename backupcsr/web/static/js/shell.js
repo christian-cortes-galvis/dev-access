@@ -201,6 +201,14 @@ const NOTIF_META = {
   schedule: { icon: 'clock', title: 'Horario' },
 };
 
+/* Etiqueta corta de la clase de error (ver logs.py) para el cuerpo del aviso. */
+const CLASS_META = {
+  fatal: 'Crítico',
+  transitorio: 'Red',
+  contencion: 'Cola',
+  parcial: 'Parcial',
+};
+
 function notifRow(alert) {
   const meta = NOTIF_META[alert.kind] || { icon: 'alert', title: 'Aviso' };
   const danger = alert.level === 'danger';
@@ -212,6 +220,9 @@ function notifRow(alert) {
       title = String(text).slice(0, cut);
       text = String(text).slice(cut + 2);
     }
+  }
+  if (alert.class && CLASS_META[alert.class]) {
+    text = '[' + CLASS_META[alert.class] + '] ' + text;
   }
   return el('div', { class: 'notif ' + (danger ? 'notif-danger' : 'notif-warn') }, [
     el('div', { class: 'notif-icon' }, [icon(meta.icon)]),
@@ -473,8 +484,15 @@ async function openRun(runId) {
       el('div', { text: pair[1] }),
     ])));
     body.appendChild(info);
-    if (data.run.error_text) {
-      body.appendChild(el('div', { class: 'alert alert-danger', text: data.run.error_text }));
+    if (data.run.error_text || (data.run.error_lines || []).length) {
+      const box = el('div', {
+        class: 'alert ' + (data.run.error_class === 'fatal' ? 'alert-danger' : 'alert-warning'),
+      });
+      if (data.run.error_text) box.appendChild(el('div', { text: data.run.error_text }));
+      (data.run.error_lines || []).forEach((line) => {
+        box.appendChild(el('div', { class: 'mono small', text: line }));
+      });
+      body.appendChild(box);
     }
     body.appendChild(el('div', { class: 'section-title', text: 'Archivos (' + data.files.length + ')' }));
     const list = el('ul', { class: 'mono', style: 'max-height:320px;overflow:auto' });

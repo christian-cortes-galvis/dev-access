@@ -14,6 +14,8 @@ lib/common.sh                 # helpers lftp: mirror_ftp, mirror_sftp, mirror_sf
 jobs/*.sh                     # un job por origen (ver horarios abajo)
 tools/validar-copias.sh       # validador de solo lectura (frescura de cada job)
 tools/diagnostico-copias.sh   # monta el NAS y prueba los FTP
+tools/diagnostico-latino-encoding.sh  # solo lectura: bytes/espacios de nombres en latino-web
+tools/copiar-nombre-invalido.sh       # copia una vez un nombre no-UTF-8 a un nombre válido en el NAS
 tools/subir-historiasclinicas.sh  # NAS -> VPS Google (manual, rsync)
 conf/*.example                # credenciales y fstab de referencia (los reales NO van a git)
 cron/backupcsr.cron           # se instala en /etc/cron.d/backupcsr
@@ -54,13 +56,16 @@ Antes de instalar, colocar los secretos (no versionados):
 | `latino-bd` | SFTP `LATINO_HOST:2200` `/home/chequeos/taskManager/backupsAutomaticos` | `latino/backupsAutomaticos` |
 | `ruta56-bd` | FTP `taskManager/ruta56` | `ruta56` (excluye `storage`) |
 | `ruta56-web` | FTP `ruta56/storage` | `ruta56/storage/app` |
-| `latino-web` | SFTP `LATINO_HOST:2200` `/home/chequeos/EDUCACION` y `/home/chequeos/DARUMA` | `latino-web/educacion` y `latino-web/daruma302.socimedicostools.info` |
+| `latino-web` | SFTP `LATINO_HOST:2200` `/home/chequeos/educacion` y `/home/chequeos/daruma302.socimedicostools.info` | `latino-web/educacion` y `latino-web/daruma302.socimedicostools.info` |
 | `gastro-bd` | FTP `taskManager/gastro` | `gastro` |
 | `enter-bd` | FTP `taskManager/pedidos` | `pedidos` |
 
 Los `*-bd` corren cada hora de 6 a 19 con los minutos **escalonados** (`2`, `14`, `26`,
-`38`, `50`); los `*-web` 3 veces al día (`6,13,19`), `ruta56-web` a los `:20` y `latino-web`
-a los `:8` para no coincidir. `flock` evita solapes. El mirror
+`38`, `50`); los `*-web` 4 veces al día (`3, 10, 16 y 20`), `ruta56-web` a los `:20` y
+`latino-web` a los `:8`, en horas fuera de la ráfaga horaria para reducir la contención
+de la cola. `flock` evita solapes y la cola global da turno a un solo mirror a la vez: si
+un job no consigue turno en `GATE_WAIT` (900 s; 1800 s en los `*-web`) la ronda queda
+**OMITIDA** (aviso, no fallo) y se reintenta en el siguiente ciclo. El mirror
 usa `--delete`: si el origen remoto queda incompleto, el destino del NAS refleja ese estado.
 
 `ruta56-bd` y `ruta56-web` comparten `/mnt/nas/ruta56`; por eso `ruta56-bd` excluye `storage`
@@ -121,11 +126,74 @@ NAS y la frescura de cada job (leyendo `/etc/cron.d/backupcsr`).
 | Estado | Significado |
 |--------|-------------|
 | `OK` | Cerró con `=== fin <job> ===` después de su última ejecución esperada |
+| `PARCIAL` | Cerró bien pero con archivos que fallaron (`AVISO: N archivos con error`) |
 | `EN_CURSO` | Empezó y aún no cierra, dentro de la gracia |
+| `OMITIDO` | No consiguió turno de la cola; se reintenta en el próximo ciclo (no es fallo) |
 | `TARDE` | Cerró bien pero antes de la última ejecución esperada (revisar horario/zona) |
 | `NUNCA` | No existe el log del job |
-| `FALLO` | Terminó en `FALLO:` o quedó a medias pasada la gracia |
+| `FALLO` | Terminó en `FALLO:`/`ERROR:` o quedó a medias pasada la gracia |
 | `DESCONOCIDO` | No se pudo interpretar el log |
+
+## Alertas y errores
+
+Los scripts emiten un **contrato de líneas** que el portal interpreta para clasificar cada
+corrida (ver `lib/common.sh`):
+
+- `AVISO: reintento N/M por error transitorio` → se reintenta con backoff (`MIRROR_ATTEMPTS`,
+  `RETRY_BACKOFF`) hasta agotar; luego `ERROR: ... [transitorio]`.
+- `AVISO: N archivos con error` → el mirror terminó con fallos por archivo: el job cierra
+  `PARCIAL` (hasta `PARTIAL_MAX`, por defecto 50) y se listan los 5 primeros en el historial.
+- `AVISO: cola ocupada` + `OMITIDO:` → la ronda no consiguió turno; estado `OMITIDO`.
+- `ERROR:` / `FALLO:` / `PROCESO: exit=N` → fallo definitivo y código de salida real.
+
+Clasificación y severidad (portal): `fatal` (auth/NAS/destino) → **Crítico**; `transitorio`
+→ **Aviso** y solo tras 2 corridas no-OK consecutivas (debounce); `contencion` (`OMITIDO`)
+→ **Aviso** "ronda omitida"; `parcial` → **Aviso** con el número de archivos. La
+`criticality` del job puede subir la severidad, nunca bajarla. Los incidentes se guardan en
+la tabla `incidents` (abierto/actualizado/resuelto; `GET /api/incidents`) y el detalle en
+`runs.error_class`/`runs.error_lines`.
+
+Aviso por correo (opcional, `conf/web.env.example` → `BACKUP_ALERT_*`): `fatal` inmediato,
+resto en un resumen diario, y aviso de recuperación al resolverse. Programar el resumen y
+la retención:
+
+```cron
+0 8 * * *    root  bash -c 'set -a; . /etc/backupcsr/web.env; set +a; cd /opt/backupcsr/web && venv/bin/python -m app.cli notify-digest'
+30 4 * * 0   root  bash -c 'set -a; . /etc/backupcsr/web.env; set +a; cd /opt/backupcsr/web && venv/bin/python -m app.cli prune'
+```
+
+`prune` borra corridas de más de 180 días e incidentes resueltos de más de 365; los logs
+rotan a 16 semanas (`logrotate/backupcsr`).
+
+### Nombres con bytes no UTF-8 (latino-web)
+
+El montaje CIFS usa `iocharset=utf8`: un nombre que **no sea UTF-8 válido** no se puede crear
+en el NAS y lftp lo reporta como `No such file or directory` sobre la ruta del destino (el
+directorio padre sí existe). No es la conexión ni la llave. Caso real: `RESOLUCIàN No 00034.pdf`
+con la `à` codificada en Latin-1 (byte `0xE0`), que no es UTF-8; el job la excluye y cierra
+`PARCIAL` (aviso), no `FALLO`.
+
+`tools/diagnostico-latino-encoding.sh` (solo lectura) muestra el nombre real con `%q` y en
+hex, en el NAS y en el origen, y si el archivo llegó a crearse:
+
+```bash
+sudo /opt/backupcsr/tools/diagnostico-latino-encoding.sh
+```
+
+`jobs/latino-web.sh` excluye el patrón inválido (`*RESOLUCI*N*No*00034.pdf`) para no repetir
+el aviso. Para **conservar** el archivo, copiarlo una sola vez a un nombre válido en UTF-8
+(`RESOLUCIàN No 00034.pdf`; no toca el origen; lee `LATINO_HOST/USER/PORT` de
+`/etc/backupcsr/credentials.env`):
+
+```bash
+sudo /opt/backupcsr/tools/copiar-nombre-invalido.sh
+# o con rutas explícitas:
+sudo /opt/backupcsr/tools/copiar-nombre-invalido.sh "<dir remoto>" "<patrón>" "<destino en NAS>"
+```
+`DRY_RUN=1` solo simula y `FORCE=1` sobrescribe el destino si ya existe.
+
+Alternativa: renombrar el archivo en el origen a un nombre UTF-8 válido, si no está
+referenciado por nombre.
 
 ## Cuándo compite con el servidor (RAM, NAS, CPU)
 
@@ -142,7 +210,9 @@ Lo que ya hace el repo:
 |--------|-------|--------|
 | `--ignore-time` (`MIRROR_COMPARE=size`) | `lib/common.sh` | Transfiere solo lo nuevo y lo que cambió de tamaño: se acabaron las rebajas de miles de archivos idénticos cada hora |
 | `mirror:overwrite` + `xfer:use-temp-file` | `lib/common.sh` | Reemplaza el archivo sin borrarlo antes; la escritura es temporal+rename (atómica) |
-| Cola global (`MIRROR_GATE`) | `lib/common.sh` | Un solo job de copia a la vez; los demás esperan turno (máx. `GATE_WAIT`, 1800 s) |
+| Cola global (`MIRROR_GATE`) | `lib/common.sh` | Un solo job de copia a la vez; si no hay turno en `GATE_WAIT` la ronda queda `OMITIDO` (aviso) y se reintenta en el siguiente ciclo |
+| Reintentos de red (`MIRROR_ATTEMPTS`, `RETRY_BACKOFF`) | `lib/common.sh` | Reintenta la conexión ante errores transitorios (timeout, `max-retries`) antes de fallar |
+| Tolerancia por archivo (`PARTIAL_MAX`) | `lib/common.sh` | Unos pocos archivos con error no tumban el job: cierra `PARCIAL` y los lista |
 | `nice`/`ionice` (`JOB_NICE=15`, clase 2 prio 7) | `lib/common.sh` | Las copias ceden CPU e I/O al resto de servicios |
 | Minutos escalonados | `cron/backupcsr.cron`, `jobs.yml` | Los 6 jobs ya no arrancan en el mismo minuto |
 | No medir tamaños mientras el job corre | `web/app/sizes.py` | El portal no recorre con `du` un árbol que se está escribiendo (`force=True` —refresco manual— sí lo hace) |
@@ -150,7 +220,10 @@ Lo que ya hace el repo:
 
 Ajustes por job (se ponen antes del `source` de la librería en `jobs/*.sh` o en
 `/etc/backupcsr/credentials.env`): `MIRROR_PARALLEL`, `MIRROR_COMPARE`, `MIRROR_GATE` (vacío =
-sin cola), `GATE_WAIT`, `JOB_NICE`, `MIRROR_RATE_LIMIT` (p. ej. `5M`).
+sin cola), `GATE_WAIT`, `JOB_NICE`, `MIRROR_RATE_LIMIT` (p. ej. `5M`), `MIRROR_ATTEMPTS`,
+`RETRY_BACKOFF`, `PARTIAL_MAX`, `SKIP_EXIT`.
+Nota: `GATE_WAIT` se lee al entrar a `job_init`, antes de `load_credentials`; los valores que
+vengan de `credentials.env` no le afectan (se aplican tras la cola).
 
 Recomendaciones de anfitrión (fuera del repo):
 

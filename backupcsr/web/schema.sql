@@ -45,12 +45,14 @@ CREATE TABLE IF NOT EXISTS runs (
   job_id INT UNSIGNED NOT NULL,
   started_at DATETIME NOT NULL,
   finished_at DATETIME NULL,
-  status ENUM('OK','FALLO','EN_CURSO','INCIERTO') NOT NULL DEFAULT 'INCIERTO',
+  status ENUM('OK','FALLO','EN_CURSO','INCIERTO','OMITIDO','PARCIAL') NOT NULL DEFAULT 'INCIERTO',
   dry_run TINYINT(1) NOT NULL DEFAULT 0,
   exit_code INT NULL,
   files_transferred INT NOT NULL DEFAULT 0,
   files_removed INT NOT NULL DEFAULT 0,
   error_text VARCHAR(1024) NULL,
+  error_class VARCHAR(16) NOT NULL DEFAULT '',
+  error_lines TEXT NULL,
   triggered_by ENUM('cron','manual') NOT NULL DEFAULT 'cron',
   log_path VARCHAR(255) NOT NULL DEFAULT '',
   truncated TINYINT(1) NOT NULL DEFAULT 0,
@@ -68,6 +70,26 @@ CREATE TABLE IF NOT EXISTS run_files (
   PRIMARY KEY (id),
   KEY idx_run_files_run (run_id),
   CONSTRAINT fk_run_files_run FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS incidents (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  job_id INT UNSIGNED NOT NULL,
+  error_class VARCHAR(16) NOT NULL DEFAULT '',
+  `level` ENUM('danger','warning') NOT NULL DEFAULT 'warning',
+  `text` VARCHAR(1024) NOT NULL DEFAULT '',
+  first_seen DATETIME NULL,
+  last_seen DATETIME NULL,
+  `count` INT UNSIGNED NOT NULL DEFAULT 0,
+  consecutive INT UNSIGNED NOT NULL DEFAULT 0,
+  resolved_at DATETIME NULL,
+  last_run_started DATETIME NULL,
+  notified_at DATETIME NULL,
+  resolved_notified_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_incidents_job_open (job_id, resolved_at),
+  KEY idx_incidents_open (resolved_at, `level`),
+  CONSTRAINT fk_incidents_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS size_snapshots (

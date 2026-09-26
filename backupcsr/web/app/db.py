@@ -75,6 +75,14 @@ _JOB_COLUMNS = (
     ("notes", "TEXT NULL"),
 )
 
+# Columnas de `runs` añadidas con posterioridad (la tabla ya existía).
+_RUN_COLUMNS = (
+    ("error_class", "VARCHAR(16) NOT NULL DEFAULT ''"),
+    ("error_lines", "TEXT NULL"),
+)
+
+_RUNS_STATUS_ENUM = "ENUM('OK','FALLO','EN_CURSO','INCIERTO','OMITIDO','PARCIAL')"
+
 
 def _ensure_columns(cur, table: str, columns) -> list[str]:
     cur.execute(
@@ -95,6 +103,28 @@ def _ensure_columns(cur, table: str, columns) -> list[str]:
     return added
 
 
+def _ensure_runs_status(cur) -> None:
+    """Amplía el ENUM de `runs.status` con OMITIDO y PARCIAL (idempotente).
+
+    `CREATE TABLE IF NOT EXISTS` no cambia el ENUM de una tabla ya creada y MySQL no
+    admite `MODIFY ... IF NOT EXISTS`, así que se comprueba information_schema.
+    """
+    cur.execute(
+        """
+        SELECT COLUMN_TYPE AS type
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'runs' AND column_name = 'status'
+        """
+    )
+    row = cur.fetchone()
+    current = (row["type"] if row else "") or ""
+    if "OMITIDO" in current and "PARCIAL" in current:
+        return
+    cur.execute(
+        f"ALTER TABLE runs MODIFY status {_RUNS_STATUS_ENUM} NOT NULL DEFAULT 'INCIERTO'"
+    )
+
+
 def init_schema() -> None:
     sql = config.SCHEMA_PATH.read_text(encoding="utf-8")
     # Quita comentarios de línea ANTES de separar por ';': si un comentario
@@ -107,8 +137,10 @@ def init_schema() -> None:
         for statement in statements:
             cur.execute(statement)
         added = _ensure_columns(cur, "jobs", _JOB_COLUMNS)
+        added += [f"runs.{name}" for name in _ensure_columns(cur, "runs", _RUN_COLUMNS)]
+        _ensure_runs_status(cur)
     if added:
-        log.info("columnas añadidas a jobs: %s", ", ".join(added))
+        log.info("columnas añadidas: %s", ", ".join(added))
 
 
 def query(sql: str, params=None, one: bool = False):

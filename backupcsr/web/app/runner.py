@@ -73,6 +73,9 @@ def start(job: dict, dry_run: bool = False) -> tuple[bool, str]:
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env["DRY_RUN"] = "1" if dry_run else "0"
+    # El job lo registra en su línea "=== inicio ... trigger=manual ===" y el portal
+    # lo persiste en runs.triggered_by (el cron usa el valor por defecto, cron).
+    env["BACKUP_TRIGGERED_BY"] = "manual"
     try:
         process = subprocess.Popen(
             ["/bin/bash", str(script)],

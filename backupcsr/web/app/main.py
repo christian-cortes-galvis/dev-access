@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from fastapi import FastAPI
 
-from . import api, auth, catalog, config, db, logs, sizes
+from . import api, auth, catalog, config, db, logs, notify, sizes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("backupcsr-web")
@@ -61,6 +61,10 @@ async def _poll() -> None:
                     logs.store_runs(job, logs.parse_slug(job["slug"]))
                 _snapshot_sizes(jobs)
                 sizes.warm(jobs)
+                # Aviso externo: fatal al abrirse el incidente y recuperación al resolverse.
+                # Fuera del bucle de eventos: el correo hace I/O bloqueante (SMTP/sendmail).
+                await asyncio.to_thread(notify.flush_immediate)
+                await asyncio.to_thread(notify.flush_recovery)
         except Exception:  # noqa: BLE001
             log.exception("falló el ciclo de sondeo")
         await asyncio.sleep(config.POLL_INTERVAL)

@@ -30,6 +30,7 @@ QUIET=0
 ERRORS=0
 WARNINGS=0
 OKS=0
+OMITIDOS=0
 
 say() { [ "$QUIET" = "1" ] || printf '%s\n' "$*"; }
 ok() { OKS=$((OKS + 1)); [ "$QUIET" = "1" ] || printf 'OK    %s\n' "$*"; }
@@ -430,8 +431,8 @@ last_raw_output() {
 # ---------------------------------------------------------------------------
 
 check_jobs_freshness() {
-	local now job log ini_line fin_line fail_line err_line last_ts raw
-	local ini_epoch fin_epoch fail_epoch err_epoch expected grace_secs status detail
+	local now job log ini_line fin_line fail_line err_line omit_line last_ts raw
+	local ini_epoch fin_epoch fail_epoch err_epoch omit_epoch expected grace_secs status detail
 	now="$(date +%s)"
 	grace_secs=$((GRACE_MIN * 60))
 
@@ -448,11 +449,13 @@ check_jobs_freshness() {
 		fin_line="$(grep -F "] === fin $job ===" "$log" | tail -n 1 || true)"
 		fail_line="$(grep -F "] FALLO:" "$log" | tail -n 1 || true)"
 		err_line="$(grep -F "] ERROR:" "$log" | tail -n 1 || true)"
+		omit_line="$(grep -F "] OMITIDO:" "$log" | tail -n 1 || true)"
 		ini_epoch="$(log_epoch_of "$(ts_of "$ini_line")")"
 		fin_epoch="$(log_epoch_of "$(ts_of "$fin_line")")"
 		fail_epoch="$(log_epoch_of "$(ts_of "$fail_line")")"
 		err_epoch="$(log_epoch_of "$(ts_of "$err_line")")"
-		last_ts="$(latest_ts "$ini_line" "$fin_line" "$fail_line" "$err_line")"
+		omit_epoch="$(log_epoch_of "$(ts_of "$omit_line")")"
+		last_ts="$(latest_ts "$ini_line" "$fin_line" "$fail_line" "$err_line" "$omit_line")"
 
 		if [ "${CRON_UNSUPPORTED[$job]:-0}" = "1" ]; then
 			warn "job $job: expresión de cron con día/mes no soportada; no se juzga frescura"
@@ -482,6 +485,9 @@ check_jobs_freshness() {
 			elif [ -n "$err_epoch" ] && [ "$err_epoch" -ge "$ini_epoch" ]; then
 				status="FALLO"
 				detail="${err_line#*] }"
+			elif [ -n "$omit_epoch" ] && [ "$omit_epoch" -ge "$ini_epoch" ]; then
+				status="OMITIDO"
+				detail="${omit_line#*] }"
 			elif job_running "$job"; then
 				status="EN_CURSO"
 				detail="corriendo desde $(ts_of "$ini_line")"
@@ -505,6 +511,7 @@ check_jobs_freshness() {
 
 		case "$status" in
 			OK | OK? | EN_CURSO) OKS=$((OKS + 1)) ;;
+			OMITIDO) OMITIDOS=$((OMITIDOS + 1)); warn "job $job OMITIDO: $detail" ;;
 			TARDE) warn "job $job TARDE: $detail" ;;
 			DESCONOCIDO) warn "job $job: $detail" ;;
 			FALLO) err "job $job FALLÓ: $detail" ;;
@@ -543,7 +550,7 @@ else
 fi
 
 printf '\n== Resumen ==\n'
-printf 'OK: %d   WARN: %d   ERROR: %d\n' "$OKS" "$WARNINGS" "$ERRORS"
+printf 'OK: %d   OMITIDO: %d   WARN: %d   ERROR: %d\n' "$OKS" "$OMITIDOS" "$WARNINGS" "$ERRORS"
 if [ "$ERRORS" -gt 0 ]; then
 	printf 'Resultado: ERROR (hay copias fallando o precondiciones sin cumplir)\n'
 	exit 2

@@ -22,20 +22,30 @@ DRY_RUN="${DRY_RUN:-0}"
 # monitoreo: este host tiene 4 vCPU y ~3,3 GB de RAM con el swap lleno, así que
 # lanzar los 6 jobs a la misma hora (:20) bloquea el resto del servidor.
 #   MIRROR_GATE  cola global: un solo job de copia a la vez (vacío = sin cola).
-#   GATE_WAIT    segundos máximos de espera por el turno antes de fallar claro.
+#   GATE_WAIT    segundos máximos de espera por el turno antes de OMITIR la ronda
+#                (deja el estado OMITIDO, no FALLO; se reintenta en el próximo ciclo).
 #   JOB_NICE     prioridad de CPU del job y de lftp (hijos heredan).
 #   JOB_IONICE_* clase/nivel de I/O de lftp.
 #   MIRROR_COMPARE  size = solo nuevos y los que cambiaron de tamaño (por defecto);
 #                   size+time = comparación clásica tamaño+fecha.
 #   MIRROR_RATE_LIMIT  bytes/s totales por corrida (0 = sin límite).
 MIRROR_GATE="${MIRROR_GATE-/run/lock/backupcsr-gate.lock}"
-GATE_WAIT="${GATE_WAIT:-1800}"
+GATE_WAIT="${GATE_WAIT:-900}"
 JOB_NICE="${JOB_NICE:-15}"
 JOB_IONICE_CLASS="${JOB_IONICE_CLASS:-2}"
 JOB_IONICE_LEVEL="${JOB_IONICE_LEVEL:-7}"
 MIRROR_COMPARE="${MIRROR_COMPARE:-size}"
 MIRROR_RATE_LIMIT="${MIRROR_RATE_LIMIT:-0}"
 MIRROR_MAX_ERRORS="${MIRROR_MAX_ERRORS:-20}"
+# Reintentos por error transitorio de red y tolerancia a errores por archivo:
+#   MIRROR_ATTEMPTS  intentos totales del mirror ante un fallo transitorio.
+#   RETRY_BACKOFF    segundos de espera entre intentos (se repite el último).
+#   PARTIAL_MAX      archivos con error que aún se toleran (el job cierra "parcial").
+#   SKIP_EXIT        código de salida cuando no se consigue el turno de la cola.
+MIRROR_ATTEMPTS="${MIRROR_ATTEMPTS:-3}"
+RETRY_BACKOFF="${RETRY_BACKOFF:-30 120}"
+PARTIAL_MAX="${PARTIAL_MAX:-50}"
+SKIP_EXIT="${SKIP_EXIT:-75}"
 
 log() {
 	printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "${JOB:-setup}" "$*"
@@ -58,7 +68,13 @@ acquire_gate() {
 	start="$(date +%s)"
 	exec 8>"$MIRROR_GATE" || die "no se pudo abrir la cola $MIRROR_GATE"
 	if ! flock -w "$GATE_WAIT" 8; then
-		die "sin turno tras ${GATE_WAIT}s de espera (otro job tiene la cola $MIRROR_GATE)"
+		# Contención: no es un fallo de datos. Se omite la ronda y se reintenta en el
+		# próximo ciclo del cron; el portal lo muestra como "OMITIDO" (aviso), no como
+		# "FALLO". Se quita el trap ERR para no registrar FALLO ni exit=1.
+		log "AVISO: cola ocupada: sin turno tras ${GATE_WAIT}s esperando $MIRROR_GATE"
+		log "OMITIDO: otro job tiene la cola; se reintenta en el próximo ciclo"
+		trap - ERR
+		exit "$SKIP_EXIT"
 	fi
 	elapsed=$(($(date +%s) - start))
 	if [ "$elapsed" -gt 2 ]; then
@@ -75,12 +91,20 @@ job_init() {
 	exec >>"$BACKUPCSR_LOG/$JOB.log" 2>&1
 	set -E
 	trap 'log "FALLO: exit=$? linea=$LINENO comando=$BASH_COMMAND"' ERR
+	trap '_backupcsr_on_exit' EXIT
 	# Las copias no deben competir con nginx/MySQL/panel por CPU ni por I/O.
 	renice -n "$JOB_NICE" -p $$ >/dev/null 2>&1 || true
 	ionice -c "$JOB_IONICE_CLASS" -n "$JOB_IONICE_LEVEL" -p $$ >/dev/null 2>&1 || true
-	log "=== inicio $JOB (dry_run=$DRY_RUN nice=$JOB_NICE) ==="
+	log "=== inicio $JOB (dry_run=$DRY_RUN nice=$JOB_NICE trigger=${BACKUP_TRIGGERED_BY:-cron}) ==="
 	require_nas
 	acquire_gate
+}
+
+# Código de salida real de la corrida (lo interpreta el portal como runs.exit_code).
+_backupcsr_on_exit() {
+	local rc=$?
+	log "PROCESO: exit=$rc"
+	exit "$rc"
 }
 
 # Carga /etc/backupcsr/credentials.env (chmod 600, root:root).
@@ -102,13 +126,82 @@ require_nas() {
 	[ -w "$BACKUPCSR_NAS" ] || die "sin permiso de escritura en $BACKUPCSR_NAS"
 }
 
+# --- Ejecución del mirror: reintentos y tolerancia a errores por archivo --------
+
+# ¿La salida de lftp apunta a un fallo transitorio de red/reconexión?
+_lftp_is_transient() {
+	grep -qiE 'max-retries|timed out|timeout|connection refused|connection reset|broken pipe|temporarily unavailable|reconnect|connection closed' "$1"
+}
+
+# Ejecuta el programa lftp (archivo) con reintentos y clasificación de errores.
+#   0 = terminó (posible "parcial", ya avisado con AVISO: N archivos con error)
+#   1 = fallo definitivo (ya logueado como ERROR:)
+# La salida de lftp se vuelca al log y a un archivo temporal (no se retiene en RAM).
+run_mirror() {
+	local program="$1"
+	local attempts="$MIRROR_ATTEMPTS"
+	local -a backoff=($RETRY_BACKOFF)
+	local out
+	out="$(mktemp "${TMPDIR:-/tmp}/backupcsr-lftp-out.XXXXXX")"
+	local rc attempt=1 delay fatal count
+	while :; do
+		rc=0
+		if lftp -f "$program" >"$out" 2>&1; then
+			rc=0
+		else
+			rc=$?
+		fi
+		cat "$out"
+		if [ "$rc" -eq 0 ]; then
+			rm -f "$out"
+			return 0
+		fi
+		if _lftp_is_transient "$out"; then
+			if [ "$attempt" -lt "$attempts" ]; then
+				delay="${backoff[$((attempt - 1))]:-${backoff[$((${#backoff[@]} - 1))]:-60}}"
+				log "AVISO: reintento $((attempt + 1))/$attempts por error transitorio (espera ${delay}s)"
+				sleep "$delay"
+				attempt=$((attempt + 1))
+				continue
+			fi
+			log "ERROR: lftp agotó $attempts intento(s) por error transitorio [transitorio]"
+			rm -f "$out"
+			return 1
+		fi
+		if grep -qiE 'max-errors exceeded' "$out"; then
+			log "ERROR: se superó el tope de errores de lftp (--max-errors=$MIRROR_MAX_ERRORS)"
+			rm -f "$out"
+			return 1
+		fi
+		fatal="$(grep -cE '^mirror: Fatal error:' "$out" || true)"
+		count="$(grep -cE '^mirror: .*: ' "$out" || true)"
+		count=$((count - fatal))
+		if [ "$fatal" -eq 0 ] && [ "$count" -gt 0 ]; then
+			grep -E '^mirror: ' "$out" | awk 'NR <= 5 { sub(/^mirror: /, ""); print }' | while IFS= read -r line; do
+				log "AVISO: archivo con error: $line"
+			done
+			log "AVISO: $count archivos con error"
+			if [ "$count" -le "$PARTIAL_MAX" ]; then
+				rm -f "$out"
+				return 0
+			fi
+			log "ERROR: $count archivos con error superan el tope de $PARTIAL_MAX"
+			rm -f "$out"
+			return 1
+		fi
+		log "ERROR: lftp terminó con código $rc"
+		rm -f "$out"
+		return 1
+	done
+}
+
 # Ejecuta un programa de lftp leído por stdin; conserva y devuelve el exit code.
 lftp_program() {
 	local program
 	local rc=0
 	program="$(mktemp "${TMPDIR:-/tmp}/backupcsr-lftp.XXXXXX")"
 	cat >"$program"
-	lftp -f "$program" || rc=$?
+	run_mirror "$program" || rc=$?
 	rm -f "$program"
 	return "$rc"
 }
@@ -162,8 +255,10 @@ mirror_sftp() {
 	if ! lftp_program <<EOF
 set sftp:connect-program "ssh -a -x -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -i $key"
 set net:timeout 20
-set net:max-retries 2
+set net:max-retries 4
+set net:persist-retries 3
 set net:reconnect-interval-base 5
+set net:reconnect-interval-max 60
 set sftp:auto-confirm yes
 $(lftp_common_settings)
 open -u "$user","" "sftp://$host:$port"
@@ -171,7 +266,7 @@ mirror ${MIRROR_OPTS[*]} ${excl[*]:-} "$remote" "$local_dir"
 bye
 EOF
 	then
-		log "ERROR: lftp falló para $user@$host:$port '$remote' (llave, host o red; ver líneas anteriores)"
+		log "no se completó el espejo de $user@$host:$port '$remote' (ver el motivo arriba)"
 		return 1
 	fi
 }
@@ -196,8 +291,10 @@ mirror_sftp_pass() {
 	if ! lftp_program <<EOF
 set sftp:connect-program "sshpass -e ssh -a -x -o BatchMode=no -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=accept-new"
 set net:timeout 20
-set net:max-retries 2
+set net:max-retries 4
+set net:persist-retries 3
 set net:reconnect-interval-base 5
+set net:reconnect-interval-max 60
 set sftp:auto-confirm yes
 $(lftp_common_settings)
 open -u "$user","" "sftp://$host:$port"
@@ -206,7 +303,7 @@ bye
 EOF
 	then
 		unset SSHPASS
-		log "ERROR: lftp (password) falló para $user@$host:$port '$remote' (contraseña, host o red; ver líneas anteriores)"
+		log "no se completó el espejo (password) de $user@$host:$port '$remote' (ver el motivo arriba)"
 		return 1
 	fi
 	unset SSHPASS
@@ -240,7 +337,10 @@ set ssl:verify-certificate no
 set ssl:check-hostname no
 set ftp:passive-mode on
 set net:timeout 30
-set net:max-retries 3
+set net:max-retries 4
+set net:persist-retries 3
+set net:reconnect-interval-base 5
+set net:reconnect-interval-max 60
 $(lftp_common_settings)
 ${debug_opts:-}
 open -u "$user","$pass" "ftp://$host"
@@ -248,7 +348,7 @@ mirror ${MIRROR_OPTS[*]} ${excl[*]:-} "$remote" "$local_dir"
 bye
 EOF
 	then
-		log "ERROR: lftp falló para $user@$host '$remote' (credenciales, TLS o red; ver líneas anteriores)"
+		log "no se completó el espejo FTP de $user@$host '$remote' (ver el motivo arriba)"
 		return 1
 	fi
 }

@@ -276,7 +276,9 @@ def collect_jobs() -> list[dict]:
     result = []
     for job in effective_jobs():
         runs = logs.parse_slug(job["slug"])
-        latest = runs[-1] if runs else None
+        # La frescura se juzga con la última corrida real; una OMITIDO no la altera.
+        latest = logs.effective_run(runs)
+        omit = logs.latest_omit(runs)
         running = runner.is_running(job)
         # El estado se evalúa con el cron instalado (lo que dispara de verdad); la
         # BD solo aporta el horario editable y se compara para avisar del desvío.
@@ -292,8 +294,10 @@ def collect_jobs() -> list[dict]:
                 **{field: job.get(field) for field in JOB_FIELDS},
                 "status": status,
                 "status_detail": detail,
+                "error_class": (latest or {}).get("error_class"),
                 "running": running,
                 "last_run": logs.run_to_dict(latest) if latest else None,
+                "omitted": logs.run_to_dict(omit) if omit else None,
                 "next_run": (
                     _iso(logs.next_run(sched, reference))
                     if job.get("enabled")
@@ -313,25 +317,77 @@ def collect_jobs() -> list[dict]:
     return result
 
 
+def _open_incidents() -> dict:
+    """Incidentes abiertos por slug (error_class/consecutive), o {} sin BD.
+
+    Sin `db.available()` previo: la consulta ya abre su conexión y, si la BD no
+    responde, el `except` devuelve {} (evita un handshake redundante en /summary).
+    """
+    try:
+        rows = db.query(
+            "SELECT j.slug AS slug, i.error_class, i.consecutive "
+            "FROM incidents i JOIN jobs j ON j.id = i.job_id "
+            "WHERE i.resolved_at IS NULL"
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("no se pudieron leer los incidentes")
+        return {}
+    return {row["slug"]: row for row in rows}
+
+
+def _raise_by_criticality(level: str, job: dict) -> str:
+    """La criticidad del job sube la severidad, nunca la baja."""
+    if level == "warning" and str(job.get("criticality") or "") == "alta":
+        return "danger"
+    return level
+
+
 def build_alerts(jobs: list[dict]) -> list[dict]:
-    """Avisos para el banner: jobs vencidos/fallidos, NAS lleno o no disponible."""
+    """Avisos para el banner: jobs fallidos/parciales/omitidos, NAS lleno o no disponible.
+
+    Severidad por clase: `fatal` → Crítico (danger); `transitorio` con debounce
+    (>= 2 corridas no-OK consecutivas) → warning; `contencion` (ronda omitida) →
+    warning; `parcial` → warning. La criticality del job puede subir el nivel.
+    """
     alerts: list[dict] = []
+    incidents = _open_incidents()
     for job in jobs:
         if not job.get("enabled"):
             continue
-        if job["status"] == "FALLO":
+        slug = job.get("slug")
+        inc = incidents.get(slug) or {}
+        consecutive = int(inc.get("consecutive") or 0)
+        status = job["status"]
+        if status == "FALLO":
+            cls = inc.get("error_class") or job.get("error_class") or "fatal"
+            if cls == "transitorio" and consecutive < 2:
+                continue  # debounce: un fallo transitorio aislado no alerta
+            level = "danger" if cls == "fatal" else "warning"
             alerts.append({
-                "level": "danger", "kind": "job", "slug": job["slug"],
+                "level": _raise_by_criticality(level, job), "kind": "job", "slug": slug,
+                "class": cls, "consecutive": consecutive,
                 "text": f"{job['name']}: {job.get('status_detail') or 'falló'}",
             })
-        elif job["status"] == "TARDE":
+        elif status == "PARCIAL":
             alerts.append({
-                "level": "warning", "kind": "job", "slug": job["slug"],
+                "level": _raise_by_criticality("warning", job), "kind": "job", "slug": slug,
+                "class": "parcial", "consecutive": consecutive,
+                "text": f"{job['name']}: {job.get('status_detail') or 'cierre parcial'}",
+            })
+        elif job.get("omitted"):
+            alerts.append({
+                "level": "warning", "kind": "job", "slug": slug,
+                "class": "contencion", "consecutive": consecutive,
+                "text": f"{job['name']}: ronda omitida (cola ocupada); se reintenta en el próximo ciclo",
+            })
+        elif status == "TARDE":
+            alerts.append({
+                "level": _raise_by_criticality("warning", job), "kind": "job", "slug": slug,
                 "text": f"{job['name']}: ejecución atrasada",
             })
-        elif job["status"] == "NUNCA":
+        elif status == "NUNCA":
             alerts.append({
-                "level": "warning", "kind": "job", "slug": job["slug"],
+                "level": _raise_by_criticality("warning", job), "kind": "job", "slug": slug,
                 "text": f"{job['name']}: sin ejecuciones registradas",
             })
     if not files.nas_ready():
@@ -371,6 +427,22 @@ def build_alerts(jobs: list[dict]) -> list[dict]:
                     "el estado se evalúa con el cron",
         })
     return alerts
+
+
+def _incident_dict(row: dict) -> dict:
+    return {
+        "id": row.get("id"),
+        "slug": row.get("job_slug"),
+        "name": row.get("job_name"),
+        "error_class": row.get("error_class"),
+        "level": row.get("level"),
+        "text": row.get("text"),
+        "first_seen": _iso(logs.from_naive(row["first_seen"])) if row.get("first_seen") else None,
+        "last_seen": _iso(logs.from_naive(row["last_seen"])) if row.get("last_seen") else None,
+        "resolved_at": _iso(logs.from_naive(row["resolved_at"])) if row.get("resolved_at") else None,
+        "count": int(row.get("count") or 0),
+        "consecutive": int(row.get("consecutive") or 0),
+    }
 
 
 def _clock_skew(jobs: list[dict]) -> float | None:
@@ -473,7 +545,10 @@ async def health():
 @router.get("/summary")
 async def summary(user: dict = Depends(auth.current_user)):
     jobs = collect_jobs()
-    counts = {"total": len(jobs), "OK": 0, "EN_CURSO": 0, "TARDE": 0, "FALLO": 0, "NUNCA": 0}
+    counts = {
+        "total": len(jobs), "OK": 0, "EN_CURSO": 0, "TARDE": 0, "FALLO": 0,
+        "NUNCA": 0, "OMITIDO": 0, "PARCIAL": 0, "DESHABILITADA": 0,
+    }
     for job in jobs:
         counts[job["status"]] = counts.get(job["status"], 0) + 1
     counts["habilitados"] = sum(1 for job in jobs if job.get("enabled"))
@@ -513,13 +588,43 @@ async def list_jobs(user: dict = Depends(auth.current_user)):
     }
 
 
+@router.get("/incidents")
+async def list_incidents(limit: int = 50, user: dict = Depends(auth.current_user)):
+    """Incidentes abiertos y últimos resueltos (historial de errores)."""
+    limit = max(1, min(int(limit), 200))
+    if not db.available():
+        return {"open": [], "recent": [], "db": False}
+    try:
+        open_rows = db.query(
+            "SELECT i.*, j.slug AS job_slug, j.name AS job_name FROM incidents i "
+            "JOIN jobs j ON j.id = i.job_id WHERE i.resolved_at IS NULL "
+            "ORDER BY i.last_seen DESC LIMIT %s",
+            (limit,),
+        )
+        recent_rows = db.query(
+            "SELECT i.*, j.slug AS job_slug, j.name AS job_name FROM incidents i "
+            "JOIN jobs j ON j.id = i.job_id WHERE i.resolved_at IS NOT NULL "
+            "ORDER BY i.resolved_at DESC LIMIT %s",
+            (limit,),
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("no se pudieron leer los incidentes")
+        return {"open": [], "recent": [], "db": True}
+    return {
+        "open": [_incident_dict(row) for row in open_rows],
+        "recent": [_incident_dict(row) for row in recent_rows],
+        "db": True,
+    }
+
+
 @router.get("/jobs/{slug}")
 async def job_detail(slug: str, tail: int = 200, user: dict = Depends(auth.current_user)):
     job = find_job(slug)
     if not job:
         raise HTTPException(status_code=404, detail="job no encontrado")
     runs = logs.parse_slug(slug)
-    latest = runs[-1] if runs else None
+    latest = logs.effective_run(runs)
+    omit = logs.latest_omit(runs)
     running = runner.is_running(job)
     status, detail = logs.evaluate(latest, _schedule(job), logs.now(), running)
     return {
@@ -527,7 +632,9 @@ async def job_detail(slug: str, tail: int = 200, user: dict = Depends(auth.curre
             **{field: job.get(field) for field in JOB_FIELDS},
             "status": status,
             "status_detail": detail,
+            "error_class": (latest or {}).get("error_class"),
             "running": running,
+            "omitted": logs.run_to_dict(omit) if omit else None,
             "next_run": _iso(logs.next_run(_schedule(job), logs.now())),
             "size": sizes.current(job),
         },
@@ -830,7 +937,7 @@ async def export_runs(
         )
     fields = [
         "job_slug", "started_at", "finished_at", "status", "dry_run", "duration_s",
-        "size_bytes", "files_transferred", "files_removed", "error_text",
+        "size_bytes", "files_transferred", "files_removed", "error_class", "error_text",
     ]
     buffer = io.StringIO()
     writer = csv.DictWriter(buffer, fieldnames=fields, extrasaction="ignore")
@@ -926,6 +1033,10 @@ def _run_row(row: dict) -> dict:
         "files_removed": row.get("files_removed", 0),
         "size_bytes": row.get("size_bytes"),
         "error_text": row.get("error_text"),
+        "error_class": row.get("error_class") or None,
+        "error_lines": logs.parse_error_lines(row.get("error_lines")),
+        "exit_code": row.get("exit_code"),
+        "triggered_by": row.get("triggered_by") or "cron",
         "log_path": row.get("log_path"),
         "duration_s": duration,
     }
