@@ -21,11 +21,12 @@ L_KEY="$BACKUPCSR_KEYS/latino"
 L_EXCL=(temp/ sessions/ localcache/ cache/)
 # El montaje CIFS usa iocharset=utf8: un nombre que no sea UTF-8 válido (p. ej.
 # RESOLUCI<0xE0>N) no se puede crear en el NAS y lftp lo reporta como "No such file or
-# directory" en cada ronda. Se excluye por patrón (sin espacios, para que la
-# interpolación de exclusiones de la librería lo pase como un solo argumento).
-# El archivo se copió una vez a mano con tools/copiar-nombre-invalido.sh como
-# "RESOLUCIàN No 00034.pdf" en UTF-8 (ver README, "Nombres con bytes no UTF-8").
-L_EXCL_DARUMA=("${L_EXCL[@]}" "*RESOLUCI*N*No*00034.pdf")
+# directory" en cada ronda. Se excluye con un glob de lftp (-X): `-x` es una ERE, no
+# casa nombres con bytes no-UTF-8 y además revienta con un `*` inicial. El glob se
+# compara byte a byte y también protege de --delete cualquier copia con ese nombre.
+# Sin espacios, para que la interpolación de exclusiones lo pase como un solo argumento.
+# Decisión: el archivo se ignora (no se copia a mano ni se conserva).
+L_EXCL_DARUMA=("${L_EXCL[@]}" "RESOLUCI*N*No*00034.pdf")
 
 mirror_latino() {
 	local remote="$1" local_dir="$2"

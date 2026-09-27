@@ -1,4 +1,8 @@
-"""Ejecución manual de jobs, respetando el mismo flock que usa cron.
+"""Ejecución de jobs: planificador (backupcsr-scheduler) o directo como respaldo.
+
+Con `BACKUP_SCHEDULER=1`, `start()` encola en el planificador (app/scheduler.py), que
+controla la concurrencia. Si el daemon no responde, cae a `start_direct()`: el mismo
+`flock -n <lockfile>` que usa cron, para no solapar corridas (degradación serial).
 
 cron ejecuta `flock -n <lockfile> /opt/backupcsr/jobs/<slug>.sh`. Aquí se adquiere el
 mismo lockfile con fcntl (no bloqueante) y se lanza el script; si cron ya lo tiene
@@ -56,7 +60,52 @@ def is_running(job: dict) -> bool:
     return False
 
 
-def start(job: dict, dry_run: bool = False) -> tuple[bool, str]:
+def submit(job: dict, action: str = "run", trigger: str = "manual",
+           dry_run: bool = False) -> dict | None:
+    """Encola en el planificador; None si está apagado, caído o rechaza la tarea.
+
+    Con `BACKUP_SCHEDULER=0` el portal sigue lanzando directo (comportamiento previo).
+    Un timeout puede ocurrir DESPUÉS de que el daemon encoló: se reintenta una vez
+    (el daemon deduplica por slug) antes de caer a ejecución directa, para no duplicar.
+    """
+    if not config.SCHEDULER:
+        return None
+    try:
+        from . import scheduler_client
+    except Exception:  # noqa: BLE001
+        return None
+    result = None
+    for _ in (1, 2):
+        try:
+            result = scheduler_client.submit(
+                job["slug"], action=action, trigger=trigger, dry_run=dry_run,
+            )
+        except scheduler_client.SchedulerUnavailable as exc:
+            log.warning("planificador sin respuesta, reintento único: %s", exc)
+            continue
+        except Exception as exc:  # noqa: BLE001
+            log.warning("planificador no disponible, se usa ejecución directa: %s", exc)
+            return None
+        break
+    if isinstance(result, dict) and result.get("ok"):
+        return result
+    log.info("el planificador rechazó %s: %s", job.get("slug"), result)
+    return None
+
+
+def start(job: dict, dry_run: bool = False, trigger: str = "manual") -> tuple[bool, str]:
+    """Intenta encolar en el planificador y, si no está, lanza el script directo.
+
+    La ejecución directa conserva el `MIRROR_GATE` serial: es la degradación segura.
+    """
+    action = "dry" if dry_run else "run"
+    queued = submit(job, action=action, trigger=trigger, dry_run=dry_run)
+    if queued is not None:
+        return True, "encolado"
+    return start_direct(job, dry_run=dry_run)
+
+
+def start_direct(job: dict, dry_run: bool = False) -> tuple[bool, str]:
     slug = job["slug"]
     if slug in _locks:
         return False, "ya hay una ejecución en curso"

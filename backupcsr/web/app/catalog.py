@@ -65,6 +65,7 @@ def catalog_jobs() -> list[dict]:
                 "name": item.get("name", item["slug"]),
                 "description": item.get("description", "") or "",
                 "origin_type": item.get("origin_type", "ftp"),
+                "origin_host": item.get("origin_host", "") or "",
                 "source": item.get("source", "") or "",
                 "dest_rel": item.get("dest_rel", "") or "",
                 "lockfile": item.get("lockfile", "") or "",
@@ -96,17 +97,18 @@ def sync_jobs() -> int:
         db.execute(
             """
             INSERT INTO jobs (
-                slug, name, description, origin_type, source, dest_rel, lockfile,
+                slug, name, description, origin_type, origin_host, source, dest_rel, lockfile,
                 enabled, cron_minute, cron_hour, cron_dom, cron_month, cron_dow, sort,
                 criticality, owner, retention_days, tags, size_exclude, notes
             ) VALUES (
-                %(slug)s, %(name)s, %(description)s, %(origin_type)s, %(source)s,
+                %(slug)s, %(name)s, %(description)s, %(origin_type)s, %(origin_host)s, %(source)s,
                 %(dest_rel)s, %(lockfile)s, %(enabled)s, %(cron_minute)s, %(cron_hour)s,
                 %(cron_dom)s, %(cron_month)s, %(cron_dow)s, %(sort)s,
                 %(criticality)s, %(owner)s, %(retention_days)s, %(tags)s,
                 %(size_exclude)s, %(notes)s
             )
             ON DUPLICATE KEY UPDATE
+                origin_host = COALESCE(NULLIF(origin_host, ''), VALUES(origin_host)),
                 criticality = COALESCE(NULLIF(criticality, ''), VALUES(criticality)),
                 owner = COALESCE(NULLIF(owner, ''), VALUES(owner)),
                 retention_days = COALESCE(retention_days, VALUES(retention_days)),

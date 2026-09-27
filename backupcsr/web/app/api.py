@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import auth, catalog, config, cronfile, db, files, logs, runner, sizes
+from . import auth, batch, catalog, config, cronfile, db, files, logs, runner, sizes
 
 log = logging.getLogger("backupcsr-web")
 
@@ -27,6 +27,7 @@ JOB_FIELDS = (
     "name",
     "description",
     "origin_type",
+    "origin_host",
     "source",
     "dest_rel",
     "lockfile",
@@ -69,6 +70,11 @@ class RunIn(BaseModel):
     retry: bool = False
 
 
+class BatchIn(BaseModel):
+    action: str
+    slugs: list[str] = []
+
+
 class JobPatch(BaseModel):
     # Programación: exige BACKUP_MANAGE_CRON (reescribe /etc/cron.d/backupcsr).
     enabled: bool | None = None
@@ -82,6 +88,7 @@ class JobPatch(BaseModel):
     name: str | None = None
     description: str | None = None
     origin_type: str | None = None
+    origin_host: str | None = None
     source: str | None = None
     dest_rel: str | None = None
     sort: int | None = None
@@ -271,6 +278,100 @@ def find_job(slug: str) -> dict | None:
     return None
 
 
+# <-- progreso ---------------------------------------------------------------
+
+_PROGRESS_STATE = {
+    "OK": "ok",
+    "TARDE": "late",
+    "PARCIAL": "partial",
+    "OMITIDO": "omitted",
+    "FALLO": "failed",
+    "NUNCA": "never",
+}
+
+
+def _short_duration(seconds: int | None) -> str:
+    if seconds is None:
+        return "—"
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m"
+    hours = minutes // 60
+    rest = minutes % 60
+    return f"{hours}h {rest}m" if rest else f"{hours}h"
+
+
+def _typical_duration(runs: list[dict]) -> int | None:
+    """Mediana de la duración de las últimas corridas OK: denominador del %."""
+    values = []
+    for run in runs:
+        if run.get("status") != "OK":
+            continue
+        seconds = logs.duration_s(run)
+        if seconds and seconds > 0:
+            values.append(seconds)
+    if not values:
+        return None
+    values = values[-10:]
+    values.sort()
+    mid = len(values) // 2
+    if len(values) % 2:
+        return values[mid]
+    return (values[mid - 1] + values[mid]) // 2
+
+
+def _progress(job: dict, runs: list[dict], latest: dict | None, running: bool,
+              status: str, next_dt: datetime | None, reference: datetime) -> dict:
+    """Progreso de una tarea: estimado mientras corre, frescura/salud en reposo.
+
+    No toca los scripts ni duplica listados remotos: el % en curso se estima con la
+    duración típica del histórico y en reposo se muestra qué tan fresca está la copia
+    respecto al próximo ciclo.
+    """
+    typical = _typical_duration(runs)
+    if not job.get("enabled"):
+        return {"state": "disabled", "percent": 0, "live": False,
+                "typical_s": typical, "detail": "tarea deshabilitada"}
+    # EN_CURSO manda aunque el lockfile no sea legible (p. ej. permisos): el log ya
+    # dijo que arrancó y dentro de la gracia debe mostrarse el avance estimado.
+    if (running or status == "EN_CURSO") and latest and latest.get("started_at"):
+        started = logs.from_naive(latest["started_at"])
+        elapsed = max(0, int((reference - started).total_seconds()))
+        if typical:
+            percent = min(99, round(elapsed * 100 / typical))
+            detail = f"{_short_duration(elapsed)} de ~{_short_duration(typical)}"
+        else:
+            percent = None
+            detail = "en curso (sin histórico de duración)"
+        return {"state": "running", "percent": percent, "live": True,
+                "typical_s": typical, "detail": detail}
+
+    state = _PROGRESS_STATE.get(status, "never")
+    if status in ("FALLO", "NUNCA"):
+        return {"state": state, "percent": 0, "live": False, "typical_s": typical,
+                "detail": "última ejecución falló" if status == "FALLO"
+                          else "sin ejecuciones registradas"}
+
+    if next_dt and latest and latest.get("started_at"):
+        started = logs.from_naive(latest["started_at"])
+        span = (next_dt - started).total_seconds()
+        remain = (next_dt - reference).total_seconds()
+        if span > 0:
+            percent = max(0, min(100, round(remain * 100 / span)))
+            detail = ("próxima en " + _short_duration(int(remain))) if remain >= 0 \
+                else ("vencida hace " + _short_duration(int(-remain)))
+            return {"state": state, "percent": percent, "live": False,
+                    "typical_s": typical, "detail": detail}
+
+    detail = {"ok": "al día", "late": "cierre anterior a lo esperado",
+              "partial": "cierre con archivos con error",
+              "omitted": "ronda omitida"}.get(state, "sin datos")
+    return {"state": state, "percent": 0, "live": False, "typical_s": typical,
+            "detail": detail}
+
+
 def collect_jobs() -> list[dict]:
     reference = logs.now()
     result = []
@@ -288,21 +389,19 @@ def collect_jobs() -> list[dict]:
             # Una tarea deshabilitada no "debe" correr: ni tarda ni falta, y así no
             # entra en los KPIs de fallos/sin datos ni en el banner de alertas.
             status, detail = "DESHABILITADA", "sin horario ni script (deshabilitada)"
+        next_dt = logs.next_run(sched, reference) if job.get("enabled") else None
         size = sizes.current(job)
         result.append(
             {
                 **{field: job.get(field) for field in JOB_FIELDS},
+                "id": job.get("id"),
                 "status": status,
                 "status_detail": detail,
                 "error_class": (latest or {}).get("error_class"),
                 "running": running,
                 "last_run": logs.run_to_dict(latest) if latest else None,
                 "omitted": logs.run_to_dict(omit) if omit else None,
-                "next_run": (
-                    _iso(logs.next_run(sched, reference))
-                    if job.get("enabled")
-                    else None
-                ),
+                "next_run": _iso(next_dt),
                 "cron_effective": sched,
                 "schedule_drift": bool(
                     job.get("installed_cron")
@@ -312,6 +411,7 @@ def collect_jobs() -> list[dict]:
                 "size": size,
                 "size_bytes": size.get("bytes"),
                 "size_exclude": job.get("size_exclude") or [],
+                "progress": _progress(job, runs, latest, running, status, next_dt, reference),
             }
         )
     return result
@@ -617,6 +717,64 @@ async def list_incidents(limit: int = 50, user: dict = Depends(auth.current_user
     }
 
 
+@router.post("/jobs/batch")
+async def run_batch(payload: BatchIn, user: dict = Depends(auth.require_admin)):
+    """Encola acciones masivas; el worker las ejecuta de a una (ver app/batch.py)."""
+    action = (payload.action or "").strip()
+    if action not in batch.ACTIONS:
+        raise HTTPException(status_code=400, detail=f"acción inválida: {action}")
+    slugs = [str(slug).strip() for slug in payload.slugs if str(slug).strip()]
+    if not slugs:
+        raise HTTPException(status_code=400, detail="no hay tareas seleccionadas")
+    if len(slugs) > 50:
+        raise HTTPException(status_code=400, detail="máximo 50 tareas por lote")
+    collected = {job["slug"]: job for job in collect_jobs()}
+    queued = batch.queued_slugs()
+    jobs = []
+    skipped = []
+    seen = set()
+    for slug in slugs:
+        if slug in seen:
+            skipped.append({"slug": slug, "reason": "duplicada"})
+            continue
+        seen.add(slug)
+        job = collected.get(slug)
+        if not job:
+            skipped.append({"slug": slug, "reason": "no encontrada"})
+            continue
+        if slug in queued:
+            skipped.append({"slug": slug, "reason": "ya está en cola"})
+            continue
+        if action == "retry" and job.get("status") != "FALLO":
+            skipped.append({"slug": slug, "reason": "no está en FALLO"})
+            continue
+        if action in ("run", "dry", "retry") and job.get("running"):
+            skipped.append({"slug": slug, "reason": "ya está corriendo"})
+            continue
+        jobs.append(job)
+    if not jobs:
+        return {"ok": False, "queued": [], "pending": [], "skipped": skipped,
+                "message": "ninguna tarea aplicable"}
+    info = batch.enqueue(action, jobs, user["username"])
+    return {"ok": True, "skipped": skipped, **info}
+
+
+@router.get("/jobs/batch")
+async def batch_status(user: dict = Depends(auth.current_user)):
+    """Estado del lote en curso: qué corre, qué queda pendiente y resultados."""
+    return batch.status()
+
+
+@router.get("/jobs/scheduler")
+async def scheduler_status(user: dict = Depends(auth.current_user)):
+    """Estado del planificador: cupos, cola y corridas (vacío si está apagado)."""
+    try:
+        from . import scheduler_client
+        return scheduler_client.status()
+    except Exception:  # noqa: BLE001
+        return {"available": False}
+
+
 @router.get("/jobs/{slug}")
 async def job_detail(slug: str, tail: int = 200, user: dict = Depends(auth.current_user)):
     job = find_job(slug)
@@ -679,7 +837,17 @@ async def run_job(slug: str, payload: RunIn, user: dict = Depends(auth.require_a
     job = find_job(slug)
     if not job:
         raise HTTPException(status_code=404, detail="job no encontrado")
-    ok, message = runner.start(job, dry_run=payload.dry_run)
+    requested = "dry" if payload.dry_run else "run"
+    queued = runner.submit(job, action=requested, trigger="manual", dry_run=payload.dry_run)
+    if queued is not None:
+        # El planificador puede fusionar con una ronda pendiente: se audita y responde
+        # la acción EFECTIVA (p. ej. un dry que cae sobre un run pendiente no es dry).
+        effective = queued.get("action") or requested
+        dry = bool(queued.get("dry_run"))
+        action = "run-dry" if dry else ("run-retry" if payload.retry or effective == "retry" else "run")
+        audit(user["username"], action, slug)
+        return {"ok": True, "message": "encolado", "dry_run": dry}
+    ok, message = runner.start_direct(job, dry_run=payload.dry_run)
     if not ok:
         raise HTTPException(status_code=409, detail=message)
     action = "run-dry" if payload.dry_run else ("run-retry" if payload.retry else "run")
@@ -723,6 +891,11 @@ async def update_job(slug: str, patch: JobPatch, user: dict = Depends(auth.requi
         if origin_type not in catalog.ORIGIN_TYPES:
             raise HTTPException(status_code=400, detail=f"origin_type inválido: {origin_type}")
         updates["origin_type"] = origin_type
+    if "origin_host" in meta_part:
+        origin_host = (meta_part["origin_host"] or "").strip()
+        if len(origin_host) > 255:
+            raise HTTPException(status_code=400, detail="origin_host supera 255 caracteres")
+        updates["origin_host"] = origin_host
     if "source" in meta_part:
         source = (meta_part["source"] or "").strip()
         if len(source) > 255:

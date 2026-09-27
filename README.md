@@ -342,6 +342,11 @@ navegador → https://grafana.cortexdev.win (nginx .49:443)
   (`netdata_system_hw_sensor_temperature_input_*`, drivers `k10temp`/`coretemp`/`zenpower`...).
   Solo la publican los hosts con sensores accesibles: hoy únicamente `proxmox-ve` (`k10temp`,
   `Tctl`); las VM invitadas no exponen sensor de CPU.
+- Uso real de CPU/RAM: los paneles "CPU usada %" y "RAM real usada %" calculan el uso por host, y el
+  stat "RAM real usada (MB)" muestra el valor absoluto en MB (unidad `mbytes`, 1024-based, estilo
+  Windows). La RAM real usada es `total − disponible`, usando `netdata_mem_available_MiB_average`
+  (`MemAvailable`): descuenta la caché reclamable y el ARC de ZFS, por eso difiere del `used` de
+  "RAM por estado (desglose)".
 - Aparece en el portal como `Grafana` (`backend/catalog.yml`, health check a `/api/health`).
 - Si añades/cambias `server` blocks (p. ej. `grafana.cortexdev.win`), `docker compose up -d` no
   recarga nginx: ejecuta `docker exec access_nginx nginx -s reload` o usa `scripts/deploy.sh`.

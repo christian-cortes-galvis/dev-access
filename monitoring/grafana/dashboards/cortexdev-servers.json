@@ -1,13 +1,13 @@
 {
   "uid": "cortexdev-servers",
   "title": "Servidores (Netdata)",
-  "description": "Recursos por host (CPU, RAM, disco, red, carga y uptime) desde el Netdata de cada servidor via Prometheus. Usa selectores __name__=~ para tolerar cambios de unidades entre versiones de Netdata.",
+  "description": "Recursos por host (CPU, RAM, disco, red, carga y uptime) desde el Netdata de cada servidor via Prometheus. Usa selectores __name__=~ para tolerar cambios de unidades entre versiones de Netdata. El uso real de RAM se calcula con netdata_mem_available (MemAvailable: descuenta cache reclamable y ARC de ZFS).",
   "tags": ["cortexdev", "infra", "netdata"],
   "timezone": "browser",
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "templating": {
@@ -67,37 +67,35 @@
     },
     {
       "id": 2,
-      "type": "gauge",
-      "title": "RAM usada",
+      "type": "stat",
+      "title": "RAM real usada (MB)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
+          "unit": "mbytes",
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 80 },
-              { "color": "red", "value": 92 }
+              { "color": "green", "value": null }
             ]
           }
         },
         "overrides": []
       },
       "options": {
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "auto"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "100 * sum by (host) ({__name__=~\"netdata_system_ram_.*\", host=~\"$host\", dimension=\"used\"}) / sum by (host) ({__name__=~\"netdata_system_ram_.*\", host=~\"$host\"})",
+          "expr": "sum by (host) ({__name__=~\"netdata_system_ram_.*\", host=~\"$host\"}) - sum by (host) ({__name__=~\"netdata_mem_available_.*\", host=~\"$host\", dimension=\"avail\"})",
           "legendFormat": "{{host}}"
         }
       ]
@@ -194,7 +192,7 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "RAM por estado",
+      "title": "RAM por estado (desglose)",
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
       "fieldConfig": {
@@ -302,6 +300,81 @@
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "{__name__=~\"netdata_system_hw_sensor_temperature_input_.*\", host=~\"$host\", dimension=\"input\", chip_id=~\".*(k10temp|coretemp|zenpower|cpu_thermal|x86_pkg_temp|soc_thermal).*\"}",
           "legendFormat": "{{host}} {{label}}"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "row",
+      "title": "Uso real (CPU / RAM)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 },
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "CPU usada %",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 39 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "100 - avg by (host) ({__name__=~\"netdata_system_cpu_percentage_.*\", host=~\"$host\", dimension=\"idle\"})",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "RAM real usada %",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 39 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 92 }
+            ]
+          },
+          "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "100 * (1 - sum by (host) ({__name__=~\"netdata_mem_available_.*\", host=~\"$host\", dimension=\"avail\"}) / sum by (host) ({__name__=~\"netdata_system_ram_.*\", host=~\"$host\"}))",
+          "legendFormat": "{{host}}"
         }
       ]
     }

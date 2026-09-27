@@ -1,8 +1,8 @@
 """Lectura/escritura de /etc/cron.d/backupcsr.
 
 El portal solo reescribe el archivo cuando BACKUP_MANAGE_CRON=1. El formato generado
-es idéntico al que ya entiende tools/validar-copias.sh (una línea por job habilitado,
-con flock y la ruta /opt/backupcsr/jobs/<slug>.sh), para no romper el validador.
+encola cada ronda en el planificador (`backupcsr-scheduler submit <slug>`), que es
+quien controla la concurrencia; `tools/validar-copias.sh` entiende ambas formas.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from . import config
 log = logging.getLogger("backupcsr-web")
 
 JOB_RE = re.compile(r"/jobs/([A-Za-z0-9_.-]+)\.sh")
+SUBMIT_RE = re.compile(r"backupcsr-scheduler\s+submit\s+([A-Za-z0-9_.-]+)")
 
 HEADER = [
     "# Copias de seguridad (backupcsr) - ubuntu-services.",
@@ -45,9 +46,11 @@ def parse(text: str | None = None) -> dict:
     jobs: dict[str, dict] = {}
     for raw in text.splitlines():
         line = raw.strip()
-        if not line or line.startswith("#") or "/jobs/" not in line:
+        if not line or line.startswith("#"):
             continue
-        match = JOB_RE.search(line)
+        if "/jobs/" not in line and "backupcsr-scheduler submit" not in line:
+            continue
+        match = JOB_RE.search(line) or SUBMIT_RE.search(line)
         if not match:
             continue
         fields = line.split()
@@ -64,8 +67,17 @@ def parse(text: str | None = None) -> dict:
 
 
 def command_for(slug: str, lockfile: str | None = None) -> str:
+    """Comando de la línea de cron: encola en el planificador con respaldo serial.
+
+    Si el binario/venv del planificador no existe o el daemon no responde, el shell
+    ejecuta el script con `flock -n` (una copia a la vez), así una caída del portal no
+    detiene las copias.
+    """
     lock = lockfile or f"/run/lock/backupcsr-{slug}.lock"
-    return f"flock -n {lock} {config.JOBS_DIR}/{slug}.sh"
+    return (
+        f"{config.SCHEDULER_BIN} submit {slug} || "
+        f"exec flock -n {lock} {config.JOBS_DIR}/{slug}.sh"
+    )
 
 
 def render(jobs: list[dict]) -> str:
@@ -157,9 +169,21 @@ def write(jobs: list[dict]) -> str:
 
 
 def reload_cron() -> bool:
+    """cron.service no implementa `reload`; se reinicia el servicio.
+
+    `systemctl reload cron` falla con "Job type reload is not applicable for unit
+    cron.service". El reinicio es barato y hace que cron relea /etc/cron.d.
+    """
     try:
-        subprocess.run(["systemctl", "reload", "cron"], timeout=10, check=False)
-        return True
+        res = subprocess.run(
+            ["systemctl", "restart", "cron"],
+            timeout=10, check=False, capture_output=True,
+        )
     except Exception as exc:  # noqa: BLE001
-        log.warning("no se pudo recargar cron: %s", exc)
+        log.warning("no se pudo reiniciar cron: %s", exc)
         return False
+    if res.returncode != 0:
+        err = (res.stderr or b"").decode(errors="replace").strip()
+        log.warning("cron: systemctl restart falló (%s): %s", res.returncode, err)
+        return False
+    return True

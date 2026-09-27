@@ -67,6 +67,12 @@ fi
 "$WEB_DIR/venv/bin/pip" install --upgrade pip >/dev/null
 "$WEB_DIR/venv/bin/pip" install -r "$WEB_DIR/requirements.txt"
 
+echo "== 3b/6 CLI del planificador =="
+BIN_DIR="$OPT_DIR/bin"
+mkdir -p "$BIN_DIR"
+install -m 0755 "$SRC_DIR/bin/backupcsr-scheduler" "$BIN_DIR/backupcsr-scheduler"
+echo "CLI instalado en $BIN_DIR/backupcsr-scheduler"
+
 echo "== 4/6 Configuración ($ENV_FILE) =="
 mkdir -p "$(dirname "$ENV_FILE")"
 if [ ! -f "$ENV_FILE" ]; then
@@ -82,8 +88,22 @@ chmod 600 "$ENV_FILE"
 echo "== 5/6 Servicio systemd =="
 sed -e "s|__WEB_DIR__|$WEB_DIR|g" "$SRC_DIR/systemd/backupcsr-web.service.template" >"$UNIT"
 chmod 0644 "$UNIT"
+SCHED_UNIT=/etc/systemd/system/backupcsr-scheduler.service
+sed -e "s|__WEB_DIR__|$WEB_DIR|g" "$SRC_DIR/systemd/backupcsr-scheduler.service.template" >"$SCHED_UNIT"
+chmod 0644 "$SCHED_UNIT"
 systemctl daemon-reload
 systemctl enable backupcsr-web.service >/dev/null 2>&1 || true
+# El daemon solo se arranca con BACKUP_SCHEDULER=1; con 0 el cron cae a ejecución
+# directa serial (gate) y no se mezclan los dos modos.
+SCHEDULER_FLAG="$(sed -n 's/^BACKUP_SCHEDULER=//p' "$ENV_FILE" | tail -n1 | tr -d ' \"')"
+if [ "${SCHEDULER_FLAG:-0}" = "1" ]; then
+	systemctl enable backupcsr-scheduler.service >/dev/null 2>&1 || true
+	systemctl restart backupcsr-scheduler.service || true
+	echo "planificador habilitado (BACKUP_SCHEDULER=1)"
+else
+	systemctl disable --now backupcsr-scheduler.service >/dev/null 2>&1 || true
+	echo "BACKUP_SCHEDULER=${SCHEDULER_FLAG:-0}: planificador no arrancado (cron usa el fallback serial)"
+fi
 
 echo "== 5b/6 Permisos de los lockfiles de jobs =="
 # cron crea /run/lock/backupcsr-*.lock como root:root 0644. El portal abre esos

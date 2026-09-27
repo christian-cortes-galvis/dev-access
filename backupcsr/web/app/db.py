@@ -67,6 +67,7 @@ def last_error() -> str | None:
 # `ADD COLUMN IF NOT EXISTS`, así que se comprueba information_schema y se altera
 # solo lo que falta (idempotente).
 _JOB_COLUMNS = (
+    ("origin_host", "VARCHAR(255) NOT NULL DEFAULT ''"),
     ("criticality", "ENUM('alta','media','baja') NOT NULL DEFAULT 'media'"),
     ("owner", "VARCHAR(128) NOT NULL DEFAULT ''"),
     ("retention_days", "INT UNSIGNED NULL"),

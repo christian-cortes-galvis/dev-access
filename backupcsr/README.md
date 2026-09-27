@@ -62,14 +62,48 @@ Antes de instalar, colocar los secretos (no versionados):
 
 Los `*-bd` corren cada hora de 6 a 19 con los minutos **escalonados** (`2`, `14`, `26`,
 `38`, `50`); los `*-web` 4 veces al día (`3, 10, 16 y 20`), `ruta56-web` a los `:20` y
-`latino-web` a los `:8`, en horas fuera de la ráfaga horaria para reducir la contención
-de la cola. `flock` evita solapes y la cola global da turno a un solo mirror a la vez: si
-un job no consigue turno en `GATE_WAIT` (900 s; 1800 s en los `*-web`) la ronda queda
-**OMITIDA** (aviso, no fallo) y se reintenta en el siguiente ciclo. El mirror
-usa `--delete`: si el origen remoto queda incompleto, el destino del NAS refleja ese estado.
+`latino-web` a los `:8`. Cada línea del cron **encola** la ronda en el planificador
+(`backupcsr-scheduler submit <slug>`, ver [Planificador](#planificador-backupcsr-scheduler)),
+que aplica los cupos de concurrencia y reintenta los fallos transitorios; las rondas que no
+caben **esperan** en la cola, ya no quedan `OMITIDAS` (con el planificador apagado, `flock`
+y `MIRROR_GATE` conservan el comportamiento serial anterior). El mirror usa `--delete`: si el
+origen remoto queda incompleto, el destino del NAS refleja ese estado.
 
 `ruta56-bd` y `ruta56-web` comparten `/mnt/nas/ruta56`; por eso `ruta56-bd` excluye `storage`
 para no borrar lo que publica `ruta56-web`.
+
+### Planificador (`backupcsr-scheduler`)
+
+Daemon systemd (`app/scheduler.py`) que es el **dueño de la concurrencia**. El cron y el
+portal encolan por un socket Unix; el daemon lanza los scripts con `MIRROR_GATE=""` y aplica:
+
+| Regla | Variable | Defecto |
+|-------|----------|---------|
+| Copias simultáneas en total | `BACKUP_MAX_JOBS` | `2` |
+| Copias simultáneas por host de origen | `BACKUP_MAX_PER_HOST` | `1` |
+| Reintentos por ronda ante fallo transitorio | `BACKUP_RETRY_MAX` | `3` |
+| Espera entre reintentos (s, ±`BACKUP_RETRY_JITTER`) | `BACKUP_RETRY_BACKOFF` | `300,900,2700` |
+
+- **`origin_host`** (`jobs.yml` / tabla `jobs`) agrupa por servidor remoto: `latino-bd` y
+  `latino-web` comparten `latino`, `ruta56-bd` y `ruta56-web` comparten `ruta56`. Es un cupo
+  lógico por servidor, no por job: evita abrir varias sesiones al mismo remoto.
+- **Reintentos**: al terminar, el daemon clasifica la corrida con `logs.classify_error`; un
+  `transitorio` se reencola con backoff y *jitter* en vez de marcar `FALLO` de inmediato.
+  Un pendiente por slug: si llega la ronda horaria mientras hay un reintento esperando, se
+  **fusionan** (coalescing). Tras agotar `BACKUP_RETRY_MAX` sí queda `FALLO`.
+- **Estado**: `/var/lib/backupcsr/scheduler.json` (atómico). Al reiniciar recarga la cola y
+  **reencola una vez** las corridas que estaban en curso.
+- **CLI**: `backupcsr-scheduler submit <slug> | status | cancel <slug>`. Cada línea del cron es
+  `backupcsr-scheduler submit <slug> || exec flock -n /run/lock/backupcsr-<slug>.lock <script>`:
+  si el daemon o el binario no están, el propio shell ejecuta el script con `flock` (serial), así
+  una caída del portal no detiene las copias. El portal hace lo mismo (`app/runner.py`). Con
+  `BACKUP_SCHEDULER=0` el daemon no se arranca (`install.sh` lo condiciona) y todo vuelve al modo
+  serial anterior.
+- **API**: `GET /api/jobs/scheduler` expone cupos, cola y corridas.
+
+Validación rápida: `systemctl status backupcsr-scheduler`, `backupcsr-scheduler status` y
+`journalctl -u backupcsr-scheduler -f`. Para probar sin copiar datos:
+`DRY_RUN=1` en una ronda encolada (`--action dry`).
 
 ### Zona horaria del anfitrión
 
@@ -173,6 +207,11 @@ directorio padre sí existe). No es la conexión ni la llave. Caso real: `RESOLU
 con la `à` codificada en Latin-1 (byte `0xE0`), que no es UTF-8; el job la excluye y cierra
 `PARCIAL` (aviso), no `FALLO`.
 
+La exclusión se pasa a lftp como **glob** (`-X`/`--exclude-glob`), no como `-x`. `-x` es una
+expresión regular: no casa los nombres con bytes no-UTF-8 y además falla con un `*` inicial
+(`Invalid preceding regular expression`), que era justo lo que dejaba la ronda en `PARCIAL`. El
+glob compara byte a byte y también protege el nombre ya copiado del `--delete` del espejo.
+
 `tools/diagnostico-latino-encoding.sh` (solo lectura) muestra el nombre real con `%q` y en
 hex, en el NAS y en el origen, y si el archivo llegó a crearse:
 
@@ -180,29 +219,27 @@ hex, en el NAS y en el origen, y si el archivo llegó a crearse:
 sudo /opt/backupcsr/tools/diagnostico-latino-encoding.sh
 ```
 
-`jobs/latino-web.sh` excluye el patrón inválido (`*RESOLUCI*N*No*00034.pdf`) para no repetir
-el aviso. Para **conservar** el archivo, copiarlo una sola vez a un nombre válido en UTF-8
-(`RESOLUCIàN No 00034.pdf`; no toca el origen; lee `LATINO_HOST/USER/PORT` de
-`/etc/backupcsr/credentials.env`):
+`jobs/latino-web.sh` excluye el patrón inválido con un glob (`RESOLUCI*N*No*00034.pdf`): la
+ronda cierra sin error y el archivo **se ignora** (no se copia). El glob también protege del
+`--delete` cualquier copia con ese nombre que ya esté en el NAS; si se quiere quitar, borrarla a
+mano:
 
 ```bash
-sudo /opt/backupcsr/tools/copiar-nombre-invalido.sh
-# o con rutas explícitas:
-sudo /opt/backupcsr/tools/copiar-nombre-invalido.sh "<dir remoto>" "<patrón>" "<destino en NAS>"
+sudo rm -f "/mnt/nas/latino-web/daruma302.socimedicostools.info/daruma_original/web/uploads/staff/assets/user14/CONCILIACIONES JUDICIALES Y EXTRAJUDICIALES/RESOLUCION_No_00034.pdf" \
+           "/mnt/nas/latino-web/daruma302.socimedicostools.info/daruma_original/web/uploads/staff/assets/user14/CONCILIACIONES JUDICIALES Y EXTRAJUDICIALES/RESOLUCIàN No 00034.pdf"
 ```
-`DRY_RUN=1` solo simula y `FORCE=1` sobrescribe el destino si ya existe.
 
-Alternativa: renombrar el archivo en el origen a un nombre UTF-8 válido, si no está
-referenciado por nombre.
+Alternativa (no usada hoy): renombrar el archivo en el origen a un nombre UTF-8 válido, si no
+está referenciado por nombre. `tools/copiar-nombre-invalido.sh` sirve para copiarlo a un nombre
+válido si en algún momento se decide conservarlo.
 
 ## Cuándo compite con el servidor (RAM, NAS, CPU)
 
 Síntoma: durante las copias el servidor se siente bloqueado (panel lento, SSH que no
-responde). Medido en `ubuntu-services`: 4 vCPU, ~3,3 GB de RAM, `SwapFree` en 84 kB,
-`Committed_AS` 6,7 GB contra un `CommitLimit` de 2,8 GB y load 15 con los 6 jobs de las `:20`
-corriendo a la vez. No es un problema de CPU de las copias (son I/O), es **memoria**: el
-recorrido y la escritura del NAS (CIFS) llenan la caché, el kernel tiene que reclamar y
-manda al swap a todo lo demás (nginx, MySQL, panel, agentes).
+responde). Medido en `ubuntu-services` (2 núcleos, 4 GB de RAM): con los mirrors a la vez el
+swap se llenaba y el load subía, aunque las copias son **I/O**, no CPU: el recorrido y la
+escritura del NAS (CIFS) llenan la caché y el kernel manda al swap a todo lo demás (nginx,
+MySQL, panel, agentes). El planificador limita la concurrencia para que eso no pase.
 
 Lo que ya hace el repo:
 
@@ -210,7 +247,9 @@ Lo que ya hace el repo:
 |--------|-------|--------|
 | `--ignore-time` (`MIRROR_COMPARE=size`) | `lib/common.sh` | Transfiere solo lo nuevo y lo que cambió de tamaño: se acabaron las rebajas de miles de archivos idénticos cada hora |
 | `mirror:overwrite` + `xfer:use-temp-file` | `lib/common.sh` | Reemplaza el archivo sin borrarlo antes; la escritura es temporal+rename (atómica) |
-| Cola global (`MIRROR_GATE`) | `lib/common.sh` | Un solo job de copia a la vez; si no hay turno en `GATE_WAIT` la ronda queda `OMITIDO` (aviso) y se reintenta en el siguiente ciclo |
+| Cola global (`MIRROR_GATE`) | `lib/common.sh` | Respaldo serial: un solo job de copia a la vez si se ejecuta un script directo; con el planificador los jobs se lanzan con `MIRROR_GATE=""` y el daemon aplica los cupos |
+| Planificador (cupos global y por host) | `app/scheduler.py`, `jobs.yml` | 2 copias a la vez y 1 por `origin_host`; las rondas que no caben esperan, sin `OMITIDO` |
+| Reintentos de ronda (`BACKUP_RETRY_*`) | `app/scheduler.py` | Un fallo transitorio se reencola con backoff y coalescing en vez de marcar `FALLO` al primer intento |
 | Reintentos de red (`MIRROR_ATTEMPTS`, `RETRY_BACKOFF`) | `lib/common.sh` | Reintenta la conexión ante errores transitorios (timeout, `max-retries`) antes de fallar |
 | Tolerancia por archivo (`PARTIAL_MAX`) | `lib/common.sh` | Unos pocos archivos con error no tumban el job: cierra `PARCIAL` y los lista |
 | `nice`/`ionice` (`JOB_NICE=15`, clase 2 prio 7) | `lib/common.sh` | Las copias ceden CPU e I/O al resto de servicios |
@@ -227,13 +266,16 @@ vengan de `credentials.env` no le afectan (se aplican tras la cola).
 
 Recomendaciones de anfitrión (fuera del repo):
 
-1. Dar aire al swap: `zram` o un swapfile extra. Con 3,3 GB y esta pila de servicios, 1 GB de
-   swap no alcanza; `Committed_AS` ya supera el `CommitLimit`.
-2. Mover fuera de este servidor las sesiones interactivas (VS Code/agentes): entre sus procesos
+1. Recursos recomendados: **8 GB de RAM y 4 vCPU** (con 6 GB y 2 vCPU el tope global debe
+   quedarse en 2). Verificar el real con `nproc`, `free -m` y `cat /proc/meminfo`; el cuello de
+   botella es el NAS CIFS y la red al remoto, no la CPU.
+2. Dar aire al swap: `zram` o un swapfile extra; sin margen, `Committed_AS` supera el
+   `CommitLimit` y el kernel manda al swap a los servicios.
+3. Mover fuera de este servidor las sesiones interactivas (VS Code/agentes): entre sus procesos
    sumaban ~1 GB de RSS y ~450 MB de swap.
-3. Reducir el trabajo en el NAS: con los dumps diarios, los `*-bd` pueden pasar a
+4. Reducir el trabajo en el NAS: con los dumps diarios, los `*-bd` pueden pasar a
    `6-19/2` (cada 2 h) o a horas fijas; el `--ignore-time` ya baja el volumen por corrida.
-4. Opcional, en el montaje CIFS: bajar `rsize/wsize` de 4M a 1M en
+5. Opcional, en el montaje CIFS: bajar `rsize/wsize` de 4M a 1M en
    `conf/fstab.backupcsr.example` (menos memoria en vuelo por operación).
 
 Prueba en seco (no descarga ni sube nada — `DRY_RUN=1` usa `--dry-run` de lftp; ojo: `-n` en
@@ -252,15 +294,23 @@ Aplicar estos cambios en el servidor (los jobs viven en `/opt`, no en el repo):
 
 ```bash
 sudo backupcsr/install.sh --no-apt                     # lib/ + jobs/ + tools/ a /opt
-sudo install -m 0644 backupcsr/cron/backupcsr.cron /etc/cron.d/backupcsr   # minutos escalonados
+sudo backupcsr/web/install.sh --no-apt                 # portal + CLI del planificador + systemd
+sudo install -m 0644 backupcsr/cron/backupcsr.cron /etc/cron.d/backupcsr   # encola por el planificador
 sudo docker compose up -d                              # topes de memoria de los contenedores
 sudo DRY_RUN=1 /opt/backupcsr/jobs/enter-bd.sh && tail -n 5 /var/log/backupcsr/enter-bd.log
+sudo /opt/backupcsr/bin/backupcsr-scheduler status     # cola y cupos del daemon
 sudo /opt/backupcsr/jobs/enter-bd.sh && grep -c "Transferring file" /var/log/backupcsr/enter-bd.log
 ```
 
+> El cron invoca `/opt/backupcsr/bin/backupcsr-scheduler` con respaldo `flock`+script a nivel de
+> shell, así que si falta el portal igual corre la copia. Arranca el planificador con
+> `BACKUP_SCHEDULER=1` en `/etc/backupcsr/web.env` (con `0`, `install.sh` no lo arranca y se usa
+> el modo serial).
+
 Si el portal tiene `BACKUP_MANAGE_CRON=1`, el horario efectivo sale de la tabla `jobs`: cambia
 los minutos en el panel de Programación (o en la BD) para que el escalonado no se pierda al
-reescribir el cron. La cola global de `lib/common.sh` protege en cualquier caso.
+reescribir el cron. El planificador protege en cualquier caso (y `MIRROR_GATE` si se ejecuta
+un script a mano).
 
 ## Subida puntual al VPS (`subir-historiasclinicas`)
 

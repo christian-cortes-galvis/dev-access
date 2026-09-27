@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   name VARCHAR(128) NOT NULL,
   description VARCHAR(255) NOT NULL DEFAULT '',
   origin_type ENUM('ftp','sftp','sftp_pass') NOT NULL DEFAULT 'ftp',
+  origin_host VARCHAR(255) NOT NULL DEFAULT '',
   source VARCHAR(255) NOT NULL DEFAULT '',
   dest_rel VARCHAR(255) NOT NULL DEFAULT '',
   lockfile VARCHAR(255) NOT NULL DEFAULT '',

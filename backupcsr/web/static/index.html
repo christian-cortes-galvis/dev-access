@@ -10,9 +10,9 @@
 	<script src="/theme.js?v=2"></script>
 	<link rel="stylesheet" href="/vendor/bootstrap/bootstrap.min.css">
 	<link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
-	<link rel="stylesheet" href="/style.css?v=6">
+	<link rel="stylesheet" href="/style.css?v=9">
 	<script src="/vendor/bootstrap/bootstrap.bundle.min.js" defer></script>
-	<script type="module" src="/js/shell.js?v=6"></script>
+	<script type="module" src="/js/shell.js?v=9"></script>
 </head>
 
 <body>
@@ -125,48 +125,54 @@
 					</div>
 					<div class="actionbar mb-2" id="jobs-actionbar">
 						<span class="small text-body-secondary" id="jobs-selected">
-							<i class="fa-solid fa-hand-pointer me-1"></i>Selecciona una fila para operar
+							<i class="fa-solid fa-hand-pointer me-1"></i>Sin selección · clic en una fila, Ctrl/Mayús para varias
 						</span>
-						<div class="btn-group btn-group-sm ms-auto flex-wrap" role="group" aria-label="Acciones de la tarea seleccionada">
-							<button type="button" class="btn btn-outline-primary" data-action="run" disabled>
-								<i class="fa-solid fa-play"></i><span>Ejecutar</span></button>
-							<button type="button" class="btn btn-outline-secondary" data-action="dry" disabled>
-								<i class="fa-solid fa-flask"></i><span>Dry-run</span></button>
-							<button type="button" class="btn btn-outline-warning" data-action="retry" disabled>
-								<i class="fa-solid fa-rotate-right"></i><span>Reintentar</span></button>
-							<button type="button" class="btn btn-outline-secondary" data-action="log" disabled>
-								<i class="fa-solid fa-file-lines"></i><span>Log</span></button>
-							<button type="button" class="btn btn-outline-secondary" data-action="history" disabled>
-								<i class="fa-solid fa-clock-rotate-left"></i><span>Historial</span></button>
-							<button type="button" class="btn btn-outline-secondary" data-action="files" disabled>
-								<i class="fa-solid fa-folder-open"></i><span>Archivos</span></button>
-							<button type="button" class="btn btn-outline-secondary" data-action="ficha" disabled>
-								<i class="fa-solid fa-id-card"></i><span>Ficha</span></button>
-							<button type="button" class="btn btn-outline-secondary" data-action="schedule" disabled>
-								<i class="fa-solid fa-calendar-days"></i><span>Horario</span></button>
-							<button type="button" class="btn btn-outline-success" data-action="toggle" disabled>
-								<i class="fa-solid fa-toggle-on"></i><span>Habilitar</span></button>
+						<div class="btn-group btn-group-sm" role="group" aria-label="Selección">
+							<button type="button" class="btn btn-outline-secondary" data-bulk="all"
+								title="Seleccionar todas las tareas visibles">
+								<i class="fa-solid fa-check-double"></i><span>Todo</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-bulk="none"
+								title="Quitar la selección">
+								<i class="fa-solid fa-eraser"></i><span>Ninguna</span></button>
 						</div>
+						<div class="btn-group btn-group-sm ms-auto flex-wrap" role="group"
+							aria-label="Acciones masivas">
+							<button type="button" class="btn btn-outline-primary" data-bulk="run" disabled>
+								<i class="fa-solid fa-play"></i><span>Ejecutar</span></button>
+							<button type="button" class="btn btn-outline-warning" data-bulk="retry" disabled>
+								<i class="fa-solid fa-rotate-right"></i><span>Reintentar fallidas</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-bulk="dry" disabled>
+								<i class="fa-solid fa-flask"></i><span>Dry-run</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-bulk="size" disabled>
+								<i class="fa-solid fa-ruler-combined"></i><span>Medir tamaños</span></button>
+							<button type="button" class="btn btn-outline-success" data-bulk="toggle" disabled>
+								<i class="fa-solid fa-toggle-on"></i><span>Habilitar/Deshabilitar</span></button>
+							<button type="button" class="btn btn-outline-secondary" data-bulk="export-csv" disabled>
+								<i class="fa-solid fa-file-csv"></i><span>Exportar CSV</span></button>
+						</div>
+						<span class="small text-body-secondary w-100" id="jobs-batch" hidden></span>
 					</div>
 					<div class="table-shell table-responsive">
 						<table class="table table-hover align-middle" id="jobs-table">
 							<thead>
 								<tr>
+									<th class="col-expand" aria-label="Detalle"></th>
 									<th>Job</th>
 									<th>Estado</th>
 									<th>Tamaño</th>
 									<th>Última</th>
 									<th>Próxima</th>
-									<th>Destino</th>
-									<th>Programación</th>
+									<th class="text-end">Acciones</th>
 								</tr>
 							</thead>
 							<tbody id="jobs-body"></tbody>
 						</table>
 					</div>
 					<p class="small text-body-secondary mt-2 mb-0">
-						Haz clic en una fila para seleccionarla (no cambia de vista) y usa los botones de la
-						barra superior: el log se abre con <em>Log</em>. <kbd>Enter</kbd> también selecciona.
+						Haz clic en una fila para seleccionarla (Ctrl/Cmd+clic alterna, Mayús+clic toma
+						un rango) y opera desde la barra superior. El <strong>+</strong> muestra destino y
+						programación, y el menú <strong>⋮</strong> reúne las acciones de cada tarea.
+						Mientras una copia corre, su barra de progreso aparece en <strong>Estado</strong>.
 					</p>
 				</section>
 

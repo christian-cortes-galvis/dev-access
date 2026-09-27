@@ -1,14 +1,20 @@
 /* Vista Panel: KPIs, tendencia de tamaño, duraciones y tabla de jobs.
 
-   La tabla no repite botones por fila: se selecciona una fila y las acciones se
-   aplican desde una única barra tipo DataTables (Buttons) superior. */
+   La tabla separa dos niveles de acción:
+     - Barra superior: acciones MASIVAS sobre la selección múltiple. La selección
+       es estilo DataTables: clic selecciona una fila, Ctrl/Cmd+clic alterna y
+       Mayús+clic toma un rango; no hay casillas por fila.
+     - Menú ⋮ por fila: acciones específicas de cada tarea.
+   Las columnas Destino y Programación viven en una fila de detalle tras el signo +.
+   Mientras una copia corre, la barra de progreso se muestra dentro del Estado. */
 import {
-  $, el, pill, statusClass, statusLabel, fmtGb, fmtDate, fmtDuration,
-  scheduleText, toast, confirmDialog,
+  $, el, pill, fmtGb, fmtDate, fmtDuration, relTime,
+  relTimeFuture, scheduleText, toast, confirmDialog,
 } from '../ui.js';
 import { sparkline, barList, emptyChart, diskGauge } from '../chart.js';
 
 let ctxRef = null;
+let tickTimer = null;
 
 /* Etiquetas y criticidad de la ficha (campos nuevos): la lista viaja como texto
    separado por comas desde el API. */
@@ -232,8 +238,148 @@ function renderSummary(state) {
 
 /* ------------------------------ tabla de jobs ------------------------------ */
 
-function jobRow(job) {
-  const tr = el('tr', { class: 'clickable', 'data-slug': job.slug, tabindex: '0' });
+const COLSPAN = 7;
+
+/* Barra de progreso de una copia en curso (dentro de la celda Estado).
+   El porcentaje va dentro de la barra. */
+function progressBar(job) {
+  const p = job.progress || {};
+  const unknown = p.percent === null || p.percent === undefined;
+  const value = unknown ? 0 : Math.max(0, Math.min(100, Number(p.percent) || 0));
+  const fill = el('div', {
+    class: 'progress-bar' + (unknown ? ' progress-bar-striped progress-bar-animated' : ''),
+    style: 'width:' + (unknown ? 100 : value) + '%',
+    text: unknown ? '…' : value + '%',
+  });
+  const bar = el('div', {
+    class: 'progress progress-cell', role: 'progressbar',
+    'aria-valuenow': String(value), 'aria-valuemin': '0', 'aria-valuemax': '100',
+    title: p.detail || 'progreso estimado por duración típica',
+    'data-live': '1',
+    'data-started': job.last_run ? (job.last_run.started_at || '') : '',
+    'data-typical': p.typical_s ? String(p.typical_s) : '',
+  }, [fill]);
+  return el('div', { class: 'progress-wrap' }, [bar]);
+}
+
+function statusCell(job) {
+  const cell = el('td', {}, [pill(job.status, job.status_detail)]);
+  const p = job.progress || {};
+  if (p.live || job.status === 'EN_CURSO') cell.appendChild(progressBar(job));
+  return cell;
+}
+
+function expandCell(job, expanded) {
+  return el('td', { class: 'col-expand' }, [
+    el('button', {
+      type: 'button', class: 'btn btn-sm btn-link js-expand p-0', 'data-slug': job.slug,
+      'aria-expanded': expanded ? 'true' : 'false',
+      'aria-label': expanded ? 'Ocultar detalle' : 'Mostrar detalle',
+      title: expanded ? 'Ocultar destino y programación' : 'Ver destino y programación',
+    }, [el('i', { class: 'fa-solid fa-circle-' + (expanded ? 'minus' : 'plus') })]),
+  ]);
+}
+
+function menuItem(action, icon, label, enabled, title) {
+  const item = el('button', {
+    type: 'button',
+    class: 'dropdown-item' + (enabled ? '' : ' disabled'),
+    'data-action': action,
+    ...(enabled ? {} : { disabled: 'disabled' }),
+  }, [el('i', { class: icon + ' me-2' }), el('span', { text: label })]);
+  if (title) item.title = title;
+  return item;
+}
+
+/* Menú ⋮ por fila con las acciones específicas de la tarea. */
+function actionsCell(job, opts) {
+  const idle = !job.running;
+  const items = [
+    menuItem('run', 'fa-solid fa-play', 'Ejecutar ahora', idle && opts.isAdmin,
+      idle && opts.isAdmin ? 'mirror con --delete' : 'Requiere rol admin y tarea detenida'),
+    menuItem('dry', 'fa-solid fa-flask', 'Dry-run', idle && opts.isAdmin,
+      idle && opts.isAdmin ? 'ejecución de prueba (sin borrar)' : 'Requiere rol admin'),
+  ];
+  if (job.status === 'FALLO') {
+    items.push(menuItem('retry', 'fa-solid fa-rotate-right', 'Reintentar', idle && opts.isAdmin,
+      idle && opts.isAdmin ? 'reintenta la copia fallida' : 'Requiere rol admin'));
+  }
+  items.push(el('li', {}, [el('hr', { class: 'dropdown-divider' })]));
+  items.push(menuItem('log', 'fa-solid fa-file-lines', 'Ver log', true));
+  items.push(menuItem('history', 'fa-solid fa-clock-rotate-left', 'Historial', true));
+  items.push(menuItem('files', 'fa-solid fa-folder-open', 'Archivos', true));
+  items.push(menuItem('ficha', 'fa-solid fa-id-card', 'Ficha', true));
+  items.push(menuItem('schedule', 'fa-solid fa-calendar-days', 'Horario', opts.canManage,
+    opts.canManage ? 'Editar horario' : 'Requiere admin y BACKUP_MANAGE_CRON=1'));
+  items.push(menuItem('toggle', job.enabled ? 'fa-solid fa-toggle-off' : 'fa-solid fa-toggle-on',
+    job.enabled ? 'Deshabilitar' : 'Habilitar', opts.canManage && idle,
+    opts.canManage ? 'Habilitar o deshabilitar la tarea' : 'Requiere admin y BACKUP_MANAGE_CRON=1'));
+
+  return el('td', { class: 'text-end' }, [
+    el('div', { class: 'dropdown jobs-actions' }, [
+      el('button', {
+        type: 'button', class: 'btn btn-sm btn-outline-secondary', 'data-bs-toggle': 'dropdown',
+        'aria-expanded': 'false', 'aria-label': 'Acciones de ' + job.name,
+      }, [el('i', { class: 'fa-solid fa-ellipsis-vertical' })]),
+      el('ul', { class: 'dropdown-menu dropdown-menu-end' }, items),
+    ]),
+  ]);
+}
+
+function detailValue(label, children) {
+  return el('div', { class: 'detail-field' }, [
+    el('div', { class: 'muted small', text: label }),
+    el('div', {}, children),
+  ]);
+}
+
+/* Fila de detalle (tras el +): destino, programación y ficha secundaria. */
+function jobDetailRow(job, expanded, opts) {
+  const fields = [
+    detailValue('Destino', [el('span', { class: 'mono', text: '/mnt/nas/' + (job.dest_rel || '') })]),
+    detailValue('Programación', [
+      el('code', { text: scheduleText(job) }),
+      el('span', {
+        class: 'badge rounded-pill ms-1 ' + (job.enabled ? 'pill-ok' : 'pill-unknown'),
+        text: job.enabled ? 'habilitada' : 'deshabilitada',
+      }),
+    ]),
+    detailValue('Origen', [el('span', { class: 'mono', text: (job.source || '—') + ' · ' + (job.origin_type || '') })]),
+    detailValue('Responsable', [el('span', { text: job.owner || '—' })]),
+    detailValue('Etiquetas', [el('span', { text: tagList(job.tags).join(', ') || '—' })]),
+    detailValue('Retención', [el('span', { text: job.retention_days ? job.retention_days + ' días' : '—' })]),
+  ];
+  if (job.schedule_drift) {
+    fields.push(el('div', { class: 'detail-field detail-warn' }, [
+      el('i', { class: 'fa-solid fa-triangle-exclamation me-1' }),
+      el('span', { text: 'La programación difiere del cron instalado' }),
+    ]));
+  }
+  if (opts.isAdmin) {
+    fields.push(el('div', { class: 'detail-field' }, [
+      el('button', {
+        type: 'button', class: 'btn btn-sm btn-outline-secondary', 'data-action': 'size',
+        'data-slug': job.slug,
+      }, [el('i', { class: 'fa-solid fa-ruler-combined me-1' }), el('span', { text: 'Medir tamaño' })]),
+    ]));
+  }
+  return el('tr', {
+    class: 'detail-row', 'data-detail': job.slug,
+    ...(expanded ? {} : { hidden: 'hidden' }),
+  }, [el('td', { colspan: String(COLSPAN) }, [el('div', { class: 'detail-grid' }, fields)])]);
+}
+
+function jobRow(job, opts) {
+  const expanded = opts.expanded.has(job.slug);
+  const checked = opts.checked.has(job.slug);
+  const tr = el('tr', {
+    class: 'clickable' + (checked ? ' selected-row' : '') + (expanded ? ' expanded-row' : ''),
+    'data-slug': job.slug, tabindex: '0', 'aria-selected': checked ? 'true' : 'false',
+    'aria-expanded': expanded ? 'true' : 'false',
+  });
+
+  tr.appendChild(expandCell(job, expanded));
+
   const tags = tagList(job.tags);
   const first = el('td', {}, [
     el('div', { class: 'fw-semibold' }, [
@@ -248,8 +394,8 @@ function jobRow(job) {
   ]);
   if (tags.length) first.appendChild(el('div', { class: 'muted small', text: tags.join(', ') }));
   tr.appendChild(first);
-  const statusCell = el('td', {}, [pill(job.status, job.status_detail)]);
-  tr.appendChild(statusCell);
+
+  tr.appendChild(statusCell(job));
 
   const size = job.size || {};
   tr.appendChild(el('td', {}, [
@@ -260,101 +406,101 @@ function jobRow(job) {
 
   const last = job.last_run;
   tr.appendChild(el('td', {}, [
-    el('div', { text: last ? fmtDate(last.started_at) : '—' }),
+    el('div', { text: last ? relTime(last.started_at) : '—', title: last ? fmtDate(last.started_at) : '' }),
     el('div', { class: 'muted small', text: last ? fmtDuration(last.duration_s) + ' · ' +
       (last.files_transferred || 0) + ' arch.' : '' }),
   ]));
-  tr.appendChild(el('td', { text: fmtDate(job.next_run) }));
-  tr.appendChild(el('td', { class: 'mono', text: '/mnt/nas/' + (job.dest_rel || '') }));
   tr.appendChild(el('td', {}, [
-    el('code', { text: scheduleText(job) }),
-    el('div', {}, [el('span', {
-      class: 'badge rounded-pill ' + (job.enabled ? 'pill-ok' : 'pill-unknown'),
-      text: job.enabled ? 'habilitada' : 'deshabilitada',
-    })]),
+    el('div', { text: job.next_run ? relTimeFuture(job.next_run) : '—' }),
+    el('div', { class: 'muted small', text: job.next_run ? fmtDate(job.next_run) : '' }),
   ]));
+
+  tr.appendChild(actionsCell(job, opts));
   return tr;
 }
 
-function selectedJob() {
-  if (!ctxRef) return null;
-  const state = ctxRef.state;
-  return (state.jobs || []).filter((job) => job.slug === state.selected)[0] || null;
+/* --------------------------- selección y acciones -------------------------- */
+
+function filteredRows(state) {
+  const jobs = Array.isArray(state.jobs) ? state.jobs : [];
+  const term = String(state.jobsSearch || '').trim().toLowerCase();
+  return term
+    ? jobs.filter((job) => [job.name, job.slug, job.tags, job.owner, job.notes]
+      .join(' ').toLowerCase().includes(term))
+    : jobs;
 }
 
 function applySelection() {
   if (!ctxRef) return;
-  const slug = ctxRef.state.selected;
+  const { checked, expanded } = ctxRef.state;
   document.querySelectorAll('#jobs-body tr[data-slug]').forEach((tr) => {
-    tr.classList.toggle('selected-row', tr.getAttribute('data-slug') === slug);
+    const slug = tr.getAttribute('data-slug');
+    tr.classList.toggle('selected-row', checked.has(slug));
+    tr.classList.toggle('expanded-row', expanded.has(slug));
+    tr.setAttribute('aria-selected', checked.has(slug) ? 'true' : 'false');
+    tr.setAttribute('aria-expanded', expanded.has(slug) ? 'true' : 'false');
+  });
+  document.querySelectorAll('#jobs-body tr.detail-row[data-detail]').forEach((tr) => {
+    tr.hidden = !expanded.has(tr.getAttribute('data-detail'));
   });
 }
 
-function setButton(action, enabled, options) {
-  const button = document.querySelector('#jobs-actionbar button[data-action="' + action + '"]');
-  if (!button) return;
-  button.disabled = !enabled;
-  const opts = options || {};
-  if (opts.label) {
-    const span = button.querySelector('span');
-    if (span) span.textContent = opts.label;
-  }
-  if (opts.icon) {
-    const node = button.querySelector('i');
-    if (node) node.className = opts.icon;
-  }
-  if (opts.cls) button.className = opts.cls;
-  if (opts.title !== undefined) button.title = opts.title;
-}
-
-function updateActionbar() {
+function updateBulkBar() {
   if (!ctxRef) return;
   const state = ctxRef.state;
-  const job = selectedJob();
   const isAdmin = !!(state.user && state.user.role === 'admin');
   const canManage = isAdmin && !!state.manageCron;
+  const chosen = state.checked.size;
+  const filtered = filteredRows(state);
 
   const label = $('jobs-selected');
   if (label) {
     label.innerHTML = '';
-    if (job) {
-      label.appendChild(el('i', { class: 'fa-solid fa-hand-pointer me-1' }));
-      label.appendChild(el('span', { class: 'fw-semibold', text: job.name }));
-      label.appendChild(document.createTextNode(' '));
-      label.appendChild(el('span', {
-        class: 'badge rounded-pill pill-' + statusClass(job.status),
-        text: statusLabel(job.status),
-      }));
-    } else {
-      label.innerHTML = '<i class="fa-solid fa-hand-pointer me-1"></i>Selecciona una fila para operar';
-    }
+    label.appendChild(el('i', { class: 'fa-solid fa-hand-pointer me-1' }));
+    label.appendChild(el('span', {
+      text: chosen
+        ? chosen + ' seleccionada' + (chosen === 1 ? '' : 's')
+        : 'Sin selección · clic en una fila, Ctrl/Mayús para varias',
+    }));
   }
 
-  const idle = !!job && !job.running;
-  setButton('run', idle && isAdmin, {
-    title: isAdmin ? 'Ejecutar ahora (mirror con --delete)' : 'Requiere rol admin',
+  const allowed = {
+    run: isAdmin && chosen > 0,
+    retry: isAdmin && chosen > 0,
+    dry: isAdmin && chosen > 0,
+    size: isAdmin && chosen > 0,
+    toggle: canManage && chosen > 0,
+    'export-csv': chosen > 0 || filtered.length > 0,
+  };
+  document.querySelectorAll('#jobs-actionbar button[data-bulk]').forEach((button) => {
+    const action = button.getAttribute('data-bulk');
+    if (action === 'all' || action === 'none') {
+      button.disabled = filtered.length === 0;
+      return;
+    }
+    button.disabled = !allowed[action];
   });
-  setButton('dry', idle && isAdmin, {
-    title: isAdmin ? 'Ejecución de prueba (sin borrar)' : 'Requiere rol admin',
-  });
-  setButton('retry', idle && isAdmin && job.status === 'FALLO', {
-    title: job && job.status === 'FALLO' ? 'Reintentar la copia fallida' : 'Solo disponible si la tarea falló',
-  });
-  setButton('log', !!job, { title: 'Ver el log de la tarea' });
-  setButton('history', !!job, { title: 'Ver ejecuciones de la tarea' });
-  setButton('files', !!job, { title: 'Explorar el destino en el NAS' });
-  setButton('ficha', !!job, {
-    title: isAdmin ? 'Ver/editar la ficha completa de la tarea' : 'Ver la ficha de la tarea',
-  });
-  setButton('schedule', !!job && canManage, {
-    title: canManage ? 'Editar el horario' : 'Requiere admin y BACKUP_MANAGE_CRON=1',
-  });
-  setButton('toggle', !!job && canManage && !job.running, {
-    label: job && job.enabled ? 'Deshabilitar' : 'Habilitar',
-    icon: job && job.enabled ? 'fa-solid fa-toggle-off' : 'fa-solid fa-toggle-on',
-    cls: 'btn btn-outline-' + (job && job.enabled ? 'warning' : 'success'),
-    title: canManage ? 'Habilitar o deshabilitar la tarea' : 'Requiere admin y BACKUP_MANAGE_CRON=1',
-  });
+}
+
+/* Estado del lote serializado (cola del backend). */
+function renderBatch(state) {
+  const box = $('jobs-batch');
+  if (!box) return;
+  const b = state.batch;
+  if (!b || !b.active) {
+    box.hidden = true;
+    box.textContent = '';
+    return;
+  }
+  const pending = (b.pending || []).length;
+  const done = (b.done || []).length;
+  const total = pending + done + (b.running ? 1 : 0);
+  const parts = [];
+  if (b.running) parts.push('ejecutando ' + b.running);
+  if (pending) parts.push(pending + ' en cola');
+  parts.push(done + '/' + total + ' completadas');
+  box.hidden = false;
+  box.textContent = 'Lote ' + (b.action || '') + ': ' + parts.join(' · ');
 }
 
 /* El estado vacío dice POR QUÉ está vacío: cargando, error de API, catálogo
@@ -368,7 +514,7 @@ function reasonCell(message, actionLabel, action) {
     button.addEventListener('click', action);
     box.appendChild(button);
   }
-  return el('td', { colspan: '7', class: 'empty' }, [box]);
+  return el('td', { colspan: String(COLSPAN), class: 'empty' }, [box]);
 }
 
 function clearFilter() {
@@ -384,16 +530,13 @@ function renderJobs(state) {
   if (!body) return;
   const count = $('jobs-count');
   const jobs = Array.isArray(state.jobs) ? state.jobs : [];
-  const term = String(state.jobsSearch || '').trim().toLowerCase();
-  const rows = term
-    ? jobs.filter((job) => [job.name, job.slug, job.tags, job.owner, job.notes]
-      .join(' ').toLowerCase().includes(term))
-    : jobs;
+  const rows = filteredRows(state);
 
-  // La selección solo se conserva si la tarea sigue existiendo.
-  if (state.selected && !jobs.some((job) => job.slug === state.selected)) {
-    state.selected = '';
-  }
+  // La selección y el detalle solo se conservan si la tarea sigue existiendo.
+  const slugs = new Set(jobs.map((job) => job.slug));
+  [...state.checked].forEach((slug) => { if (!slugs.has(slug)) state.checked.delete(slug); });
+  [...state.expanded].forEach((slug) => { if (!slugs.has(slug)) state.expanded.delete(slug); });
+  if (state.anchor && !slugs.has(state.anchor)) state.anchor = '';
 
   const fragment = document.createDocumentFragment();
   const filtered = state.loaded && jobs.length > 0 && rows.length === 0;
@@ -416,9 +559,16 @@ function renderJobs(state) {
       reasonCell(message, filtered ? 'Quitar filtro' : '', filtered ? clearFilter : null),
     ]));
   } else {
+    const opts = {
+      isAdmin: !!(state.user && state.user.role === 'admin'),
+      canManage: !!(state.user && state.user.role === 'admin') && !!state.manageCron,
+      checked: state.checked,
+      expanded: state.expanded,
+    };
     rows.forEach((job) => {
       try {
-        fragment.appendChild(jobRow(job));
+        fragment.appendChild(jobRow(job, opts));
+        fragment.appendChild(jobDetailRow(job, opts.expanded.has(job.slug), opts));
       } catch (err) {
         console.error('jobRow', job && job.slug, err);
         fragment.appendChild(el('tr', {}, [
@@ -432,25 +582,88 @@ function renderJobs(state) {
   body.replaceChildren(fragment);
   if (count) count.textContent = state.loaded ? String(rows.length) : '—';
   applySelection();
-  updateActionbar();
+  updateBulkBar();
+  renderBatch(state);
 }
 
-function select(slug) {
-  if (ctxRef.state.selected === slug) return;
-  ctxRef.state.selected = slug;
-  console.debug('[panel] tarea seleccionada:', slug,
-    '· filas:', document.querySelectorAll('#jobs-body tr[data-slug]').length);
+function toggleExpanded(slug) {
+  const set = ctxRef.state.expanded;
+  if (set.has(slug)) set.delete(slug); else set.add(slug);
   applySelection();
-  updateActionbar();
 }
 
-async function handleAction(action) {
-  const job = selectedJob();
+/* Selección estilo DataTables: clic simple, Ctrl/Cmd+clic alterna, Mayús+clic rango. */
+function selectRow(slug, event) {
+  const state = ctxRef.state;
+  const rows = filteredRows(state);
+  const index = rows.findIndex((job) => job.slug === slug);
+  const additive = !!(event && (event.ctrlKey || event.metaKey));
+  const range = !!(event && event.shiftKey);
+  const anchorIndex = state.anchor ? rows.findIndex((job) => job.slug === state.anchor) : -1;
+  const set = state.checked;
+  if (range && anchorIndex >= 0 && index >= 0) {
+    const [from, to] = anchorIndex <= index ? [anchorIndex, index] : [index, anchorIndex];
+    set.clear();
+    for (let i = from; i <= to; i += 1) set.add(rows[i].slug);
+  } else if (additive) {
+    if (set.has(slug)) set.delete(slug); else set.add(slug);
+    state.anchor = slug;
+  } else {
+    set.clear();
+    set.add(slug);
+    state.anchor = slug;
+  }
+  applySelection();
+  updateBulkBar();
+}
+
+function setAllChecked(on) {
+  const rows = filteredRows(ctxRef.state);
+  const set = ctxRef.state.checked;
+  set.clear();
+  if (on) rows.forEach((job) => set.add(job.slug));
+  ctxRef.state.anchor = on && rows.length ? rows[0].slug : '';
+  applySelection();
+  updateBulkBar();
+}
+
+/* Los valores que Excel/LibreOffice evalúan como fórmula se neutralizan con "'". */
+const CSV_RISKY = /^[=+\-@\t\r]/;
+
+function csvCell(value) {
+  let text = String(value === null || value === undefined ? '' : value);
+  if (CSV_RISKY.test(text)) text = "'" + text;
+  return /[",\n;]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+
+function exportCsv(jobs) {
+  const head = ['slug', 'nombre', 'estado', 'progreso', 'bytes', 'ultima', 'proxima', 'destino', 'habilitada'];
+  const lines = [head.join(',')];
+  jobs.forEach((job) => {
+    const p = job.progress || {};
+    lines.push([
+      job.slug, job.name, job.status,
+      p.percent === null || p.percent === undefined ? '' : p.percent,
+      job.size_bytes === null || job.size_bytes === undefined ? '' : job.size_bytes,
+      job.last_run ? job.last_run.started_at : '',
+      job.next_run || '', job.dest_rel || '', job.enabled ? '1' : '0',
+    ].map(csvCell).join(','));
+  });
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = el('a', { href: url, download: 'copias-' + new Date().toISOString().slice(0, 10) + '.csv' });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function handleAction(action, slug) {
+  const job = (ctxRef.state.jobs || []).filter((item) => item.slug === slug)[0];
   if (!job) {
-    toast('Selecciona una tarea en la tabla', 'warn');
+    toast('Tarea no encontrada', 'warn');
     return;
   }
-  const slug = job.slug;
   try {
     if (action === 'run' || action === 'dry' || action === 'retry') {
       const dry = action === 'dry';
@@ -466,6 +679,10 @@ async function handleAction(action) {
       if (dry) await launch();
       else confirmDialog(retry ? 'Reintentar copia' : 'Ejecutar copia', message, launch,
         retry ? 'Reintentar' : 'Ejecutar', 'btn-warning');
+    } else if (action === 'size') {
+      await ctxRef.api.post('/jobs/' + slug + '/size/refresh', {});
+      toast('Midiendo ' + job.name + '…', 'info');
+      setTimeout(() => ctxRef.refresh(true), 1500);
     } else if (action === 'toggle') {
       await ctxRef.api.patch('/jobs/' + slug, { enabled: !job.enabled });
       toast((job.enabled ? 'Deshabilitada: ' : 'Habilitada: ') + job.name, 'ok');
@@ -488,30 +705,153 @@ async function handleAction(action) {
   }
 }
 
+async function handleBulk(action) {
+  const state = ctxRef.state;
+  const isAdmin = !!(state.user && state.user.role === 'admin');
+  const canManage = isAdmin && !!state.manageCron;
+  const rows = filteredRows(state);
+
+  if (action === 'all') { setAllChecked(true); return; }
+  if (action === 'none') { setAllChecked(false); return; }
+
+  const selected = rows.filter((job) => state.checked.has(job.slug));
+  if (action === 'export-csv') {
+    exportCsv(selected.length ? selected : rows);
+    return;
+  }
+  if (!selected.length) {
+    toast('Selecciona al menos una tarea', 'warn');
+    return;
+  }
+  const names = selected.length + ' tarea' + (selected.length === 1 ? '' : 's');
+
+  try {
+    if (action === 'run' || action === 'dry' || action === 'retry') {
+      if (!isAdmin) { toast('Requiere rol admin', 'err'); return; }
+      if (action === 'retry' && !selected.some((job) => job.status === 'FALLO')) {
+        toast('No hay tareas fallidas en la selección', 'warn');
+        return;
+      }
+      const launch = async () => {
+        const res = await ctxRef.api.post('/jobs/batch', {
+          action: action, slugs: selected.map((job) => job.slug),
+        });
+        const queued = (res.queued || []).length;
+        const skipped = (res.skipped || []).length;
+        toast(queued + ' en cola' + (skipped ? ' · ' + skipped + ' omitidas' : ''), 'info');
+        state.batch = await ctxRef.api.get('/jobs/batch');
+        renderBatch(state);
+      };
+      if (action === 'dry') { await launch(); return; }
+      const title = action === 'retry' ? 'Reintentar copias' : 'Ejecutar copias';
+      const verb = action === 'retry' ? 'Reintentar' : 'Ejecutar';
+      confirmDialog(title, verb + ' ' + names + '? El mirror usa --delete y puede borrar en el NAS.',
+        launch, verb, 'btn-warning');
+      return;
+    }
+    if (action === 'size') {
+      if (!isAdmin) { toast('Requiere rol admin', 'err'); return; }
+      const res = await ctxRef.api.post('/jobs/batch', {
+        action: 'size', slugs: selected.map((job) => job.slug),
+      });
+      toast((res.queued || []).length + ' mediciones en cola', 'info');
+      state.batch = await ctxRef.api.get('/jobs/batch');
+      renderBatch(state);
+      return;
+    }
+    if (action === 'toggle') {
+      if (!canManage) { toast('Requiere admin y BACKUP_MANAGE_CRON=1', 'err'); return; }
+      const enable = selected.some((job) => !job.enabled);
+      const label = enable ? 'Habilitar' : 'Deshabilitar';
+      confirmDialog(label + ' tareas', label + ' ' + names + '?', async () => {
+        let ok = 0;
+        let fail = 0;
+        for (const job of selected) {
+          try {
+            await ctxRef.api.patch('/jobs/' + job.slug, { enabled: enable });
+            ok += 1;
+          } catch (err) {
+            fail += 1;
+          }
+        }
+        toast((enable ? 'Habilitadas: ' : 'Deshabilitadas: ') + ok + (fail ? ' · fallos: ' + fail : ''),
+          fail ? 'warn' : 'ok');
+        await ctxRef.refresh(true);
+      }, label, enable ? 'btn-success' : 'btn-warning');
+    }
+  } catch (err) {
+    toast('Error: ' + err.message, 'err');
+  }
+}
+
+/* La barra avanza entre refrescos del servidor con el reloj local, usando la
+   duración típica que ya envió el backend (`data-typical`). */
+function startTicker() {
+  if (tickTimer) return;
+  tickTimer = setInterval(() => {
+    document.querySelectorAll('#jobs-body .progress-cell[data-live="1"]').forEach((bar) => {
+      const typical = Number(bar.getAttribute('data-typical')) || 0;
+      const started = bar.getAttribute('data-started');
+      if (!typical || !started) return;
+      const elapsed = (Date.now() - new Date(started).getTime()) / 1000;
+      if (!isFinite(elapsed) || elapsed < 0) return;
+      const percent = Math.min(99, Math.round(elapsed * 100 / typical));
+      const fill = bar.firstElementChild;
+      if (fill) {
+        fill.style.width = percent + '%';
+        fill.textContent = percent + '%';
+      }
+      bar.setAttribute('aria-valuenow', String(percent));
+    });
+  }, 2000);
+}
+
 export const panel = {
   id: 'panel',
   admin: false,
   mount(ctx) {
     ctxRef = ctx;
+    startTicker();
     const body = $('jobs-body');
     if (body) {
       body.addEventListener('click', (event) => {
+        const expandButton = event.target.closest('button.js-expand');
+        if (expandButton) {
+          event.preventDefault();
+          const row = expandButton.closest('tr[data-slug]');
+          toggleExpanded(expandButton.getAttribute('data-slug') ||
+            (row && row.getAttribute('data-slug')));
+          return;
+        }
+        const actionButton = event.target.closest('button[data-action]');
+        if (actionButton) {
+          if (actionButton.disabled) return;
+          event.preventDefault();
+          const row = actionButton.closest('tr');
+          const slug = actionButton.getAttribute('data-slug') ||
+            (row && row.getAttribute('data-slug'));
+          handleAction(actionButton.getAttribute('data-action'), slug);
+          return;
+        }
+        if (event.target.closest('button, a, input, .dropdown-menu, .dropdown-toggle')) return;
         const row = event.target.closest('tr[data-slug]');
-        if (row) select(row.getAttribute('data-slug'));
+        if (row) selectRow(row.getAttribute('data-slug'), event);
       });
       body.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target.closest('button, a, input, .dropdown-menu')) return;
         const row = event.target.closest('tr[data-slug]');
         if (!row) return;
         event.preventDefault();
-        select(row.getAttribute('data-slug'));
+        if (event.key === 'Enter') toggleExpanded(row.getAttribute('data-slug'));
+        else selectRow(row.getAttribute('data-slug'), event);
       });
     }
     const bar = $('jobs-actionbar');
     if (bar) {
       bar.addEventListener('click', (event) => {
-        const button = event.target.closest('button[data-action]');
-        if (button && !button.disabled) handleAction(button.getAttribute('data-action'));
+        const button = event.target.closest('button[data-bulk]');
+        if (button && !button.disabled) handleBulk(button.getAttribute('data-bulk'));
       });
     }
     // El filtro de #jobs-search lo gobierna shell.js (setupFilters), que además
@@ -527,4 +867,5 @@ export const panel = {
   renderSummary(state) { renderSummary(state); },
   renderCharts(state) { renderCharts(state); },
   renderJobs(state) { renderJobs(state); },
+  renderBatch(state) { renderBatch(state); },
 };

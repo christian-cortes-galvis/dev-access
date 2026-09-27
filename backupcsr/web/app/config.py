@@ -63,6 +63,25 @@ POLL_INTERVAL = _int("BACKUP_POLL_INTERVAL", 30)
 GRACE_MIN = _int("BACKUP_GRACE_MIN", 90)
 MAX_RUN_FILES = _int("BACKUP_MAX_RUN_FILES", 5000)
 
+# --- Planificador de copias (backupcsr-scheduler) -------------------------------
+# El daemon es el dueño de la concurrencia: cupos global y por host, cola persistente
+# y reintentos de fallos transitorios. Con BACKUP_SCHEDULER=0 todo sigue como antes
+# (cron directo + MIRROR_GATE serial) y el portal lanza los jobs directo.
+SCHEDULER = _flag("BACKUP_SCHEDULER")
+SCHEDULER_BIN = Path(os.environ.get("BACKUP_SCHEDULER_BIN", str(OPT_DIR / "bin" / "backupcsr-scheduler")))
+SCHEDULER_SOCKET = Path(
+    os.environ.get("BACKUP_SCHEDULER_SOCKET", "/run/backupcsr/scheduler.sock")
+)
+SCHEDULER_STATE = Path(
+    os.environ.get("BACKUP_SCHEDULER_STATE", "/var/lib/backupcsr/scheduler.json")
+)
+SCHEDULER_MAX_JOBS = _int("BACKUP_MAX_JOBS", 2)
+SCHEDULER_MAX_PER_HOST = _int("BACKUP_MAX_PER_HOST", 1)
+SCHEDULER_RETRY_MAX = _int("BACKUP_RETRY_MAX", 3)
+SCHEDULER_RETRY_BACKOFF = os.environ.get("BACKUP_RETRY_BACKOFF", "300,900,2700")
+SCHEDULER_RETRY_JITTER = os.environ.get("BACKUP_RETRY_JITTER", "0.2")
+SCHEDULER_POLL = _int("BACKUP_SCHEDULER_POLL", 2)
+
 # --- Tamaños (GB por tarea) ---
 SIZE_TTL = _int("BACKUP_SIZE_TTL", 1800)
 SIZE_MAX_ENTRIES = _int("BACKUP_SIZE_MAX_ENTRIES", 500000)

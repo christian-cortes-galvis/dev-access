@@ -2,17 +2,20 @@
 # Instalar con: install -m 0644 cron/backupcsr.cron /etc/cron.d/backupcsr
 #
 # Horarios (hora local Colombia, UTC-5): los jobs *-bd corren cada hora (6-19) y
-# los *-web 4 veces al día (3, 10, 16 y 20), fuera de la ráfaga horaria, para reducir
-# la contención de la cola global (los que no consiguen turno quedan OMITIDOS, no FALLIDOS).
+# los *-web 4 veces al día (3, 10, 16 y 20), fuera de la ráfaga horaria.
+# Cada línea ENCOLA la ronda en el planificador (backupcsr-scheduler), que es quien
+# controla la concurrencia (2 copias a la vez, 1 por host) y reintenta los fallos
+# transitorios con backoff. Si el daemon no responde, el CLI cae a la ejecución
+# directa serial (el script conserva su MIRROR_GATE como respaldo).
+#
 # OJO: el cron de Ubuntu/Debian NO implementa CRON_TZ (la cadena no está en /usr/sbin/cron);
 # la línea CRON_TZ de abajo solo exporta la variable a los jobs. El anfitrión DEBE estar en
 # America/Bogota (timedatectl set-timezone America/Bogota) o los horarios se evalúan en la
 # zona del host y los jobs correrán a otra hora (con UTC, 01:00-14:00 Colombia).
 #
 # Los minutos van ESCALONADOS (02, 08, 14, 20, 26, 38, 50) para no lanzar los jobs a
-# la vez: este anfitrión tiene 4 vCPU y poca RAM, y seis mirrors simultáneos contra
-# el NAS lo dejaban sin memoria y con el swap lleno. Además cada job toma turno en
-# una cola global (MIRROR_GATE, ver lib/common.sh) y corre con nice/ionice bajos.
+# la vez: este anfitrión tiene poca RAM y seis mirrors simultáneos contra el NAS lo
+# dejaban sin memoria. El planificador mantiene el tope global y por host.
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 LANG=C.UTF-8
@@ -20,12 +23,12 @@ CRON_TZ=America/Bogota
 MAILTO=""
 
 # --- Google y Latino: SFTP con llave -> NAS ---
-2 6-19 * * *        root  flock -n /run/lock/backupcsr-google-bd.lock   /opt/backupcsr/jobs/google-bd.sh
-14 6-19 * * *       root  flock -n /run/lock/backupcsr-latino-bd.lock   /opt/backupcsr/jobs/latino-bd.sh
-8 3,10,16,20 * * *   root  flock -n /run/lock/backupcsr-latino-web.lock  /opt/backupcsr/jobs/latino-web.sh
+2 6-19 * * *        root  /opt/backupcsr/bin/backupcsr-scheduler submit google-bd || exec flock -n /run/lock/backupcsr-google-bd.lock /opt/backupcsr/jobs/google-bd.sh
+14 6-19 * * *       root  /opt/backupcsr/bin/backupcsr-scheduler submit latino-bd || exec flock -n /run/lock/backupcsr-latino-bd.lock /opt/backupcsr/jobs/latino-bd.sh
+8 3,10,16,20 * * *   root  /opt/backupcsr/bin/backupcsr-scheduler submit latino-web || exec flock -n /run/lock/backupcsr-latino-web.lock /opt/backupcsr/jobs/latino-web.sh
 
 # --- NAS local (Ruta56, Gastro, Enter): FTP -> NAS ---
-26 6-19 * * *        root  flock -n /run/lock/backupcsr-ruta56-bd.lock   /opt/backupcsr/jobs/ruta56-bd.sh
-20 3,10,16,20 * * *  root  flock -n /run/lock/backupcsr-ruta56-web.lock  /opt/backupcsr/jobs/ruta56-web.sh
-38 6-19 * * *       root  flock -n /run/lock/backupcsr-gastro-bd.lock   /opt/backupcsr/jobs/gastro-bd.sh
-50 6-19 * * *       root  flock -n /run/lock/backupcsr-enter-bd.lock    /opt/backupcsr/jobs/enter-bd.sh
+26 6-19 * * *        root  /opt/backupcsr/bin/backupcsr-scheduler submit ruta56-bd || exec flock -n /run/lock/backupcsr-ruta56-bd.lock /opt/backupcsr/jobs/ruta56-bd.sh
+20 3,10,16,20 * * *  root  /opt/backupcsr/bin/backupcsr-scheduler submit ruta56-web || exec flock -n /run/lock/backupcsr-ruta56-web.lock /opt/backupcsr/jobs/ruta56-web.sh
+38 6-19 * * *       root  /opt/backupcsr/bin/backupcsr-scheduler submit gastro-bd || exec flock -n /run/lock/backupcsr-gastro-bd.lock /opt/backupcsr/jobs/gastro-bd.sh
+50 6-19 * * *       root  /opt/backupcsr/bin/backupcsr-scheduler submit enter-bd || exec flock -n /run/lock/backupcsr-enter-bd.lock /opt/backupcsr/jobs/enter-bd.sh

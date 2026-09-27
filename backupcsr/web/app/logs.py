@@ -421,6 +421,11 @@ def _duration(run: dict) -> int | None:
     return seconds if seconds >= 0 else None
 
 
+def duration_s(run: dict) -> int | None:
+    """Duración de una corrida en segundos (público, para el cálculo de progreso)."""
+    return _duration(run)
+
+
 def _db_status(run: dict) -> str:
     status = run.get("status")
     return status if status in ESTADOS else "INCIERTO"

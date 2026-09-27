@@ -249,9 +249,14 @@ parse_cron() {
 	while IFS= read -r line; do
 		line="${line#"${line%%[![:space:]]*}"}"
 		case "$line" in '' | '#'*) continue ;; esac
-		case "$line" in *"/jobs/"*) : ;; *) continue ;; esac
+		case "$line" in
+			*"/jobs/"* | *"backupcsr-scheduler submit"*) : ;;
+			*) continue ;;
+		esac
 		local job
 		if [[ "$line" =~ /jobs/([A-Za-z0-9_.-]+)\.sh ]]; then
+			job="${BASH_REMATCH[1]}"
+		elif [[ "$line" =~ backupcsr-scheduler[[:space:]]+submit[[:space:]]+([A-Za-z0-9_.-]+) ]]; then
 			job="${BASH_REMATCH[1]}"
 		else
 			continue
@@ -273,9 +278,9 @@ parse_cron() {
 }
 
 # El portal puede reescribir el cron desde su BD (BACKUP_MANAGE_CRON=1) y, si la BD quedó
-# desviada (p. ej. todos los jobs a :20), varios arrancan a la vez: compiten por la cola
-# global y `flock -n` descarta corridas en silencio. Avisa si dos jobs habilitados comparten
-# minuto con horas solapadas.
+# desviada (p. ej. todos los jobs a :20), varios arrancan a la vez: el planificador los
+# encola y aplica sus cupos (2 globales, 1 por host), así que ya no se descartan corridas.
+# Avisa si dos jobs habilitados comparten minuto con horas solapadas.
 check_cron_spread() {
 	local -a jobs=("${CRON_JOBS[@]}")
 	local n=${#jobs[@]}
@@ -293,7 +298,7 @@ check_cron_spread() {
 			hb=("${FIELD_OUT[@]}")
 			for h in "${ha[@]}"; do
 				if [[ " ${hb[*]} " == *" $h "* ]]; then
-					warn "job $a y $b arrancan al minuto ${CRON_MIN[$a]} con horas solapadas (flock -n puede descartar corridas)"
+					warn "job $a y $b arrancan al minuto ${CRON_MIN[$a]} con horas solapadas (el planificador los encola, pero conviene escalonarlos)"
 					collisions=$((collisions + 1))
 					break
 				fi

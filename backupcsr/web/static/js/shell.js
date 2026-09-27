@@ -24,7 +24,10 @@ const state = {
   tab: 'panel',
   histJob: '',
   filesJob: '',
-  selected: '',
+  checked: new Set(),
+  expanded: new Set(),
+  anchor: '',
+  batch: null,
   jobsSearch: '',
   // Diagnóstico de carga: la tabla nunca se vacía por un fallo de API.
   loading: true,
@@ -127,6 +130,7 @@ function jobsSignature(jobs) {
     job.slug, job.status, job.status_detail, job.running ? 1 : 0, job.enabled ? 1 : 0,
     job.last_run && job.last_run.started_at, job.last_run && job.last_run.duration_s,
     job.next_run, job.size && job.size.bytes, job.size && job.size.pending ? 1 : 0,
+    job.progress && job.progress.live ? 1 : 0, job.progress && job.progress.state,
   ].join(':')).join('|');
 }
 
@@ -182,6 +186,17 @@ async function loadSeries() {
     state.seriesLoaded = true;
   } catch (e) {
     state.seriesLoaded = true;
+  }
+}
+
+/* Cola de acciones masivas (en memoria del backend): se consulta en cada refresco
+   para mostrar el avance aunque el lote lo haya lanzado otra pestaña o sesión. */
+async function loadBatch() {
+  try {
+    state.batch = await api.get('/jobs/batch');
+    if (state.tab === 'panel') panel.renderBatch(state);
+  } catch (e) {
+    /* endpoint no disponible o sin sesión: se reintenta en el próximo ciclo */
   }
 }
 
@@ -622,12 +637,14 @@ function setupDataIcons() {
 
 function startRefresh() {
   if (refreshTimer) return;
-  refreshTimer = setInterval(() => {
+  refreshTimer = setInterval(async () => {
     if (document.hidden) return;
-    // No reconstruimos la tabla con un modal abierto: evita perder el contexto
-    // de una acción en curso.
+    // No reconstruimos la tabla con un modal o un menú abiertos: evita perder el
+    // contexto de una acción en curso.
     if (document.querySelector('.modal.show')) return;
-    loadAll(true);
+    if (document.querySelector('.dropdown-menu.show')) return;
+    await loadAll(true);
+    await loadBatch();
   }, 30000);
 }
 

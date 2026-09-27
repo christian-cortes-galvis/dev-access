@@ -105,6 +105,21 @@ export function relTime(value) {
   return 'hace ' + Math.floor(h / 24) + 'd';
 }
 
+/* Tiempo futuro ("en 42m") para la próxima ejecución; si ya venció, delega en
+   relTime y dice "vencida hace …". */
+export function relTimeFuture(value) {
+  if (!value) return '—';
+  const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
+  if (isNaN(seconds)) return '—';
+  if (seconds <= 0) return relTime(value).replace('hace ', 'vencida hace ');
+  if (seconds < 60) return 'en ' + seconds + 's';
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return 'en ' + m + 'm';
+  const h = Math.floor(m / 60);
+  if (h < 24) return 'en ' + h + 'h';
+  return 'en ' + Math.floor(h / 24) + 'd';
+}
+
 export function scheduleText(job) {
   return [job.cron_minute, job.cron_hour, job.cron_dom, job.cron_month, job.cron_dow].join(' ');
 }

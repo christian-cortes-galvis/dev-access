@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Cliente del planificador de copias (backupcsr-scheduler).
+# Se instala en /opt/backupcsr/bin; cron lo invoca para encolar cada ronda.
+set -euo pipefail
+
+WEB_DIR="${BACKUP_WEB_DIR:-/opt/backupcsr/web}"
+PYTHON="${BACKUP_PYTHON:-$WEB_DIR/venv/bin/python}"
+
+if [ ! -x "$PYTHON" ]; then
+	echo "ERROR: no existe $PYTHON (ejecuta backupcsr/web/install.sh)" >&2
+	exit 3
+fi
+
+export PYTHONPATH="$WEB_DIR${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PYTHON" -m app.scheduler_cli "$@"

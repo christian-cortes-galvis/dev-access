@@ -19,9 +19,12 @@ DRY_RUN="${DRY_RUN:-0}"
 
 # --- Presión sobre el anfitrión -------------------------------------------------
 # El NAS (CIFS) y la RAM son compartidos con nginx, MySQL, el portal y el stack de
-# monitoreo: este host tiene 4 vCPU y ~3,3 GB de RAM con el swap lleno, así que
-# lanzar los 6 jobs a la misma hora (:20) bloquea el resto del servidor.
-#   MIRROR_GATE  cola global: un solo job de copia a la vez (vacío = sin cola).
+# monitoreo: el anfitrión tiene 2 núcleos y 4 GB (ampliable a 8 GB / 4 vCPU), así que
+# lanzar los 6 jobs a la misma hora bloquea el resto del servidor.
+#   MIRROR_GATE  respaldo serial: un solo job de copia a la vez (vacío = sin cola).
+#                Con el planificador (backupcsr-scheduler) el daemon lanza los jobs
+#                con MIRROR_GATE vacío y aplica sus propios cupos (global y por host);
+#                este gate solo protege las ejecuciones directas/manuales.
 #   GATE_WAIT    segundos máximos de espera por el turno antes de OMITIR la ronda
 #                (deja el estado OMITIDO, no FALLO; se reintenta en el próximo ciclo).
 #   JOB_NICE     prioridad de CPU del job y de lftp (hijos heredan).
@@ -244,7 +247,11 @@ mirror_sftp() {
 	local -a excl=()
 	local item
 	for item in "$@"; do
-		excl+=(-x "$item")
+		# -X (--exclude-glob) y no -x (--exclude): -x es una ERE que no casa los
+		# nombres con bytes no-UTF-8 (p. ej. 0xE0) y revienta con un `*` inicial
+		# ("Invalid preceding regular expression"). El glob compara byte a byte y
+		# además protege esos nombres de --delete.
+		excl+=(-X "$item")
 	done
 	mirror_options
 	require_cmd lftp
@@ -279,7 +286,8 @@ mirror_sftp_pass() {
 	local -a excl=()
 	local item
 	for item in "$@"; do
-		excl+=(-x "$item")
+		# exclusiones por glob (-X); ver la nota en mirror_sftp.
+		excl+=(-X "$item")
 	done
 	mirror_options
 	require_cmd lftp
@@ -316,7 +324,8 @@ mirror_ftp() {
 	local -a excl=()
 	local item
 	for item in "$@"; do
-		excl+=(-x "$item")
+		# exclusiones por glob (-X); ver la nota en mirror_sftp.
+		excl+=(-X "$item")
 	done
 	mirror_options
 	require_cmd lftp

@@ -30,6 +30,9 @@ jobs:
     name: Google BD
     description: Copias automáticas de la BD en el VPS Google (SFTP con llave).
     origin_type: sftp
+    # Agrupador del cupo por host del planificador: los jobs con el mismo valor no
+    # corren a la vez (evita abrir varias sesiones al mismo servidor remoto).
+    origin_host: google
     source: /var/www/html/backupsAutomaticos
     dest_rel: google/backupsAutomaticos
     lockfile: /run/lock/backupcsr-google-bd.lock
@@ -42,6 +45,7 @@ jobs:
     name: Latino BD
     description: Copias automáticas de Chequeos/Latino (SFTP con llave, puerto 2200).
     origin_type: sftp
+    origin_host: latino
     source: /home/chequeos/taskManager/backupsAutomaticos
     dest_rel: latino/backupsAutomaticos
     lockfile: /run/lock/backupcsr-latino-bd.lock
@@ -54,6 +58,7 @@ jobs:
     name: Ruta56 BD
     description: Base de datos de Ruta56 (FTP). Excluye storage para no pisar ruta56-web.
     origin_type: ftp
+    origin_host: ruta56
     source: taskManager/ruta56
     dest_rel: ruta56
     lockfile: /run/lock/backupcsr-ruta56-bd.lock
@@ -70,6 +75,7 @@ jobs:
     name: Ruta56 Web
     description: Archivos de storage de Ruta56 (FTP); comparte árbol con ruta56-bd.
     origin_type: ftp
+    origin_host: ruta56
     source: ruta56/storage
     dest_rel: ruta56/storage/app
     lockfile: /run/lock/backupcsr-ruta56-web.lock
@@ -82,6 +88,7 @@ jobs:
     name: Latino Web
     description: "Archivos web de Chequeos/Latino (SFTP con la llave latino): educacion y daruma302.socimedicostools.info -> NAS."
     origin_type: sftp
+    origin_host: latino
     source: /home/chequeos/educacion + /home/chequeos/daruma302.socimedicostools.info
     dest_rel: latino-web
     lockfile: /run/lock/backupcsr-latino-web.lock
@@ -94,6 +101,7 @@ jobs:
     name: Gastro BD
     description: Base de datos de Gastro (FTP).
     origin_type: ftp
+    origin_host: gastro
     source: taskManager/gastro
     dest_rel: gastro
     lockfile: /run/lock/backupcsr-gastro-bd.lock
@@ -106,6 +114,7 @@ jobs:
     name: Enter BD
     description: Base de datos de Enter/Pedidos (FTP).
     origin_type: ftp
+    origin_host: enter
     source: taskManager/pedidos
     dest_rel: pedidos
     lockfile: /run/lock/backupcsr-enter-bd.lock
@@ -126,6 +135,7 @@ jobs:
     name: Google Web (historias clínicas)
     description: Copia del sitio de historias clínicas del VPS Google (SFTP con la llave google). Se dejó fuera por publicar a OneDrive; el script ya espeja a /mnt/nas/google-web y sigue deshabilitado.
     origin_type: sftp
+    origin_host: google
     source: /var/www/html/centro-apoyo/assets + /var/www/html/sapg/assets + /var/www/html/historiasclinicas/files
     dest_rel: google-web
     lockfile: /run/lock/backupcsr-google-web.lock
@@ -136,6 +146,7 @@ jobs:
     name: Ticware BD
     description: Base de datos de Ticware (FTP). Se dejó fuera porque Ticware no debe llenar el NAS; falta el script y confirmar origen y destino.
     origin_type: ftp
+    origin_host: ticware
     lockfile: /run/lock/backupcsr-ticware-bd.lock
     enabled: false
     sort: 92
@@ -144,6 +155,7 @@ jobs:
     name: Ticware Web
     description: Archivos web de Ticware (FTP). Se dejó fuera porque Ticware no debe llenar el NAS; falta el script y confirmar origen y destino.
     origin_type: ftp
+    origin_host: ticware
     lockfile: /run/lock/backupcsr-ticware-web.lock
     enabled: false
     sort: 93

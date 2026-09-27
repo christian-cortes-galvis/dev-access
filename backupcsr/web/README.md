@@ -8,13 +8,24 @@ con `backups.cortexdev.win`/`pbs`, que es Proxmox Backup Server).
 
 - **Panel**: app-shell empresarial (barra lateral + topbar) con KPIs (GB almacenados, crecimiento
   7/30 días, jobs OK/fallidos, duración media, NAS libre), gráficos de tendencia y tabla de jobs
-  con estado (OK / EN CURSO / TARDE / FALLÓ / NUNCA / DESHABILITADA), tamaño, última y próxima
-  ejecución.
-  La tabla **no repite botones por fila**: se selecciona una fila y las acciones (ejecutar real,
-  `DRY_RUN`, **reintentar**, log, historial, archivos, **ficha**, horario, habilitar/deshabilitar)
-  se aplican desde una única barra superior estilo DataTables *Buttons*, con iconos Font Awesome.
+  con estado (OK / EN CURSO / TARDE / FALLÓ / NUNCA / DESHABILITADA), **progreso**, tamaño,
+  última y próxima ejecución.
+  La tabla usa **selección múltiple estilo DataTables** (clic selecciona, Ctrl/Cmd+clic alterna,
+  Mayús+clic toma un rango; sin casillas por fila) y **acciones masivas** en la barra superior
+  (ejecutar, reintentar fallidas, dry-run, medir tamaños, habilitar/deshabilitar, exportar CSV),
+  encoladas en el **planificador** (`app/scheduler.py`), que limita la concurrencia (2 copias a
+  la vez, 1 por host) y reintenta los fallos transitorios. Ver
+  [Planificador](../README.md#planificador-backupcsr-scheduler). Las
+  acciones específicas de cada tarea viven en el menú **⋮** de la fila y las columnas **Destino**
+  y **Programación** se muestran en una fila de detalle tras el signo **+** (estilo DataTables
+  *Responsive*).
   Cada fila muestra la **criticidad** (badge) y las **etiquetas**, y el buscador filtra además por
   etiquetas, responsable y notas (ver [Ficha de la tarea](#ficha-de-la-tarea)).
+- **Progreso por tarea**: mientras la copia corre, su barra aparece dentro de la columna
+  **Estado** (no hay columna extra) con el **porcentaje dentro** de la barra y se **estima** con
+  la duración típica del histórico de `runs` (`min(99, transcurrido/típica)`), sin pre-pases ni
+  recorridos extra. La barra avanza entre refrescos con el reloj local, no solo cada 30 s. En
+  reposo no se muestra barra. Ver [Progreso y acciones masivas](#progreso-y-acciones-masivas).
 - **Tamaño (GB) por tarea**: recorrido cacheado del destino de cada job en `/mnt/nas`, con
   histórico (`size_snapshots`) para ver crecimiento. `ruta56-bd` excluye `storage` (`size_exclude`
   en `jobs.yml`) para no contar dos veces el árbol compartido con `ruta56-web`.
@@ -94,7 +105,9 @@ y los logs, y para lanzar los jobs con el mismo `flock` que usa cron. nginx (con
 2. **Base y usuario**: ejecutar `sql/bootstrap.sql` como admin de MySQL (cambiar la clave). El
    usuario `backupcsr_web` siempre lleva password fuerte; nunca vacío.
 3. **`/etc/backupcsr/web.env`** (0600 root) a partir de `conf/web.env.example`, con `BACKUP_DB_*`,
-   `BACKUP_SECRET_KEY` y `BACKUP_MANAGE_CRON`.
+   `BACKUP_SECRET_KEY`, `BACKUP_MANAGE_CRON` y, si se usa el planificador, `BACKUP_SCHEDULER=1`
+   (más `BACKUP_MAX_JOBS`, `BACKUP_MAX_PER_HOST` y `BACKUP_RETRY_*`); con `0`, `install.sh` no
+   arranca `backupcsr-scheduler` y el cron usa el respaldo serial.
 
 ## Instalación
 
@@ -285,6 +298,10 @@ cd /opt/backupcsr/web && venv/bin/python -m app.cli status
 # Pruebas (NAS temporal; no tocan /mnt/nas, ni MySQL, ni /run/lock, ni /etc):
 cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_files_manage.py
 cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_jobs_disabled.py
+cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_progress.py
+cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_batch_queue.py
+cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_scheduler.py
+cd <checkout> && /opt/backupcsr/web/venv/bin/python backupcsr/web/tests/test_cronfile.py
 ```
 
 ### El Panel no lista tareas ("Sin tareas que mostrar")
@@ -337,11 +354,33 @@ contraseñas funcione. Si tras el cambio de código el navegador sigue rellenán
 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>: el atributo `readonly` viaja en `index.html`, que es
 lo único que puede quedar en caché.
 
-### Las tareas desaparecen al seleccionar una fila
+### Las tareas desaparecen al hacer clic en una fila
 
-- Seleccionar **no** cambia de vista ni reconstruye la tabla (solo resalta la fila y habilita la
-  barra superior); el log se abre con el botón **Log**.
+- Hacer clic en una fila la **selecciona** (estilo DataTables); Ctrl/Cmd+clic alterna y
+  Mayús+clic toma un rango. No cambia de vista ni reconstruye la tabla. El <kbd>+</kbd> (o
+  <kbd>Enter</kbd>) es lo que **expande/colapsa** el detalle.
 - El contenedor de la tabla usa `overflow-y: clip` a propósito: si fuera un scrollport vertical,
   al enfocar una fila el navegador podía desplazarlo y dejar la tabla fuera de vista.
-- El refresco automático de 30 s no repinta si los datos no cambiaron y se pausa con un modal
-  abierto, para no reconstruir la tabla mientras se opera.
+- El refresco automático de 30 s no repinta si los datos no cambiaron y se pausa con un modal o un
+  menú desplegable abiertos, para no reconstruir la tabla mientras se opera. La selección y las
+  filas expandidas se conservan entre refrescos (`state.checked` / `state.expanded`).
+
+### Progreso y acciones masivas
+
+- **Progreso en curso**: `api._progress` estima el porcentaje con la mediana de duración de las
+  últimas corridas OK (`min(99, transcurrido/típica)`); sin histórico deja la barra indeterminada.
+  Se considera en curso también cuando el estado es `EN_CURSO` aunque el lockfile no sea legible.
+  La barra se dibuja dentro de la columna **Estado** y un ticker local la avanza cada 2 s usando
+  `progress.typical_s` y `last_run.started_at`, para que no dependa del refresco de 30 s.
+  No modifica los scripts ni añade un pre-pase de listado remoto.
+- **Sin barra en reposo**: la columna Progreso se eliminó; el estado de una tarea detenida se lee
+  en su píldora (`OK`/`TARDE`/`FALLO`/…).
+- **Acciones masivas**: `POST /api/jobs/batch` (admin) con `action` ∈ `run|dry|retry|size` y una
+  lista de `slugs`. Con `BACKUP_SCHEDULER=1` cada acción se **encola en el planificador**
+  (`app/scheduler.py`), que ordena, limita la concurrencia y reintenta; sin él, `app/batch.py`
+  conserva la FIFO serial anterior. En ambos casos se audita cada lanzamiento.
+  `GET /api/jobs/batch` expone `running`/`pending`/`done` del lote y
+  `GET /api/jobs/scheduler` el estado del planificador (cupos, cola y corridas).
+- **Habilitar/Deshabilitar en bloque** y **Exportar CSV** no usan la cola: el primero hace `PATCH`
+  por tarea en secuencia (requiere admin y `BACKUP_MANAGE_CRON=1`) y el segundo se genera en el
+  cliente.
